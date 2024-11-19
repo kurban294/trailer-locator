@@ -6,6 +6,8 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapPinIcon, QrCodeIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
+import { useNavigate, useParams } from 'react-router-dom';
+import LocationMap from './LocationMap';
 
 // Fix for default marker icon in react-leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -15,24 +17,51 @@ L.Icon.Default.mergeOptions({
   shadowUrl: '/marker-shadow.png',
 });
 
-const FindUnit = ({ unit, onClose }) => {
+const FindUnit = () => {
+  const [unit, setUnit] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [locationHistory, setLocationHistory] = useState([]);
   const [showQRCode, setShowQRCode] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  useEffect(() => {
+    if (id) {
+      fetchUnitDetails(id);
+    }
+  }, [id]);
+
+  const fetchUnitDetails = async (unitId) => {
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .select('*')
+        .eq('id', unitId)
+        .single();
+
+      if (error) throw error;
+
+      setUnit(data);
+      fetchLocationHistory(data.id);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (unit?.id) {
-      console.log('Unit ID:', unit.id); // Debug log
-      fetchLocationHistory();
+      fetchLocationHistory(unit.id);
     }
   }, [unit?.id]);
 
-  const fetchLocationHistory = async () => {
+  const fetchLocationHistory = async (unitId) => {
     try {
       setLoading(true);
-      console.log('Fetching location history for unit:', unit.id);
+      console.log('Fetching location history for unit:', unitId);
       
       // First get the location records
       const { data: locations, error: locationError } = await supabase
@@ -47,7 +76,7 @@ const FindUnit = ({ unit, onClose }) => {
           recorded_at,
           recorded_by
         `)
-        .eq('unit_id', unit.id)
+        .eq('unit_id', unitId)
         .order('recorded_at', { ascending: false });
 
       if (locationError) throw locationError;
@@ -216,35 +245,27 @@ const FindUnit = ({ unit, onClose }) => {
       </div>
 
       {/* Map Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="h-[400px]">
-          <MapContainer
-            center={position}
-            zoom={15}
-            style={{ height: '100%', width: '100%' }}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-            <Marker position={position}>
-              <Popup>
-                <div className="text-center">
-                  <strong>{unit.unit_number}</strong>
+      <LocationMap
+        center={position}
+        zoom={15}
+        style={{ height: '400px', width: '100%' }}
+      >
+        <Marker position={position}>
+          <Popup>
+            <div className="text-center">
+              <strong>{unit.unit_number}</strong>
+              <br />
+              Last updated: {formatDate(currentLocation.recorded_at)}
+              {currentLocation.notes && (
+                <>
                   <br />
-                  Last updated: {formatDate(currentLocation.recorded_at)}
-                  {currentLocation.notes && (
-                    <>
-                      <br />
-                      <em>{currentLocation.notes}</em>
-                    </>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          </MapContainer>
-        </div>
-      </div>
+                  <em>{currentLocation.notes}</em>
+                </>
+              )}
+            </div>
+          </Popup>
+        </Marker>
+      </LocationMap>
 
       {/* QR Code Section */}
       {showQRCode && googleMapsUrl && (
@@ -303,7 +324,7 @@ const FindUnit = ({ unit, onClose }) => {
                         </td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           <a
-                            href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
+                            href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-800"

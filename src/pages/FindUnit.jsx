@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { debounce } from 'lodash'
 import FindUnitDetails from '../components/FindUnit'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { Link } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
 
 const FindUnit = () => {
   const [loading, setLoading] = useState(false)
@@ -94,6 +96,29 @@ const FindUnit = () => {
     setSearchQuery('')
   }
 
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'green':
+        return 'bg-green-100 text-green-800 border-green-200'
+      case 'amber':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'red':
+        return 'bg-red-100 text-red-800 border-red-200'
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const filteredUnits = searchResults.filter(unit => {
+    const searchLower = searchQuery.toLowerCase()
+    return (
+      unit.unit_number?.toLowerCase().includes(searchLower) ||
+      unit.license_number?.toLowerCase().includes(searchLower) ||
+      unit.location?.toLowerCase().includes(searchLower) ||
+      unit.status?.toLowerCase().includes(searchLower)
+    )
+  })
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -145,44 +170,57 @@ const FindUnit = () => {
                 {searchResults.length > 0 && (
                   <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden">
                     <ul className="divide-y divide-gray-200">
-                      {searchResults.map((unit) => (
+                      {filteredUnits.map((unit) => (
                         <li key={unit.id}>
-                          <button
-                            className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors duration-150"
-                            onClick={() => handleUnitSelect(unit)}
-                          >
-                            <div>
-                              <p className="text-lg font-semibold text-gray-900">{unit.unit_number}</p>
-                              <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
-                                <span>{unit.unit_type}</span>
-                                {unit.manufacturer && (
-                                  <>
-                                    <span className="h-1 w-1 rounded-full bg-gray-300"></span>
-                                    <span>{unit.manufacturer}</span>
-                                  </>
-                                )}
-                                {unit.rag_status && (
-                                  <>
-                                    <span className="h-1 w-1 rounded-full bg-gray-300"></span>
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                      unit.rag_status === 'Green' ? 'bg-green-100 text-green-800' :
-                                      unit.rag_status === 'Amber' ? 'bg-yellow-100 text-yellow-800' :
-                                      'bg-red-100 text-red-800'
-                                    }`}>
-                                      {unit.rag_status}
+                          <Link to={`/unit/${unit.id}`} className="block">
+                            <div className="px-6 py-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-3 mb-2">
+                                    <h3 className="text-lg font-semibold text-gray-900">
+                                      Unit {unit.unit_number}
+                                    </h3>
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium border ${getStatusColor(unit.status)}`}>
+                                      {unit.status}
                                     </span>
-                                  </>
-                                )}
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                      <p className="text-sm text-gray-500">License Number</p>
+                                      <p className="text-sm font-medium text-gray-900">{unit.license_number || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-500">Unit Type</p>
+                                      <p className="text-sm font-medium text-gray-900">{unit.unit_type || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-sm text-gray-500">Location</p>
+                                      <p className="text-sm font-medium text-gray-900">{unit.location || 'Unknown'}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="ml-4 flex flex-col items-end">
+                                  <p className="text-sm text-gray-500">
+                                    Last Updated
+                                  </p>
+                                  <p className="text-sm text-gray-900">
+                                    {unit.updated_at 
+                                      ? formatDistanceToNow(new Date(unit.updated_at), { addSuffix: true })
+                                      : 'Never'}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                            <div className="ml-4">
-                              <span className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                                View Details
-                              </span>
-                            </div>
-                          </button>
+                          </Link>
                         </li>
                       ))}
+                      {filteredUnits.length === 0 && (
+                        <li className="py-8">
+                          <div className="text-center">
+                            <p className="text-gray-500">No units found matching your search.</p>
+                          </div>
+                        </li>
+                      )}
                     </ul>
                   </div>
                 )}

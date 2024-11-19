@@ -1,14 +1,24 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import Logo from '../components/Logo'
 
-export default function Login() {
+export default function ResetPassword() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
-  const [isResetMode, setIsResetMode] = useState(false)
   const navigate = useNavigate()
+
+  // Check if we have a valid session with reset token
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        navigate('/login')
+      }
+    }
+    checkSession()
+  }, [navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -17,42 +27,35 @@ export default function Login() {
     setLoading(true)
 
     const formData = new FormData(e.target)
-    const email = formData.get('email')
     const password = formData.get('password')
+    const confirmPassword = formData.get('confirmPassword')
 
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) throw error
-
-      navigate('/')
-    } catch (error) {
-      setError(error.message)
-    } finally {
+    // Validate password
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
       setLoading(false)
+      return
     }
-  }
 
-  const handleResetPassword = async (e) => {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
-    setLoading(true)
-
-    const formData = new FormData(e.target)
-    const email = formData.get('email')
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long')
+      setLoading(false)
+      return
+    }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { error } = await supabase.auth.updateUser({
+        password: password
       })
 
       if (error) throw error
 
-      setSuccess('Check your email for the password reset link')
+      setSuccess('Password updated successfully')
+      
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        navigate('/login')
+      }, 2000)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -67,49 +70,47 @@ export default function Login() {
           <Logo className="w-20 h-20" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Trailer Locator
+          Reset Your Password
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          {isResetMode ? 'Reset your password' : 'Sign in to manage your fleet'}
+          Enter your new password below
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={isResetMode ? handleResetPassword : handleSubmit}>
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                New Password
               </label>
               <div className="mt-1">
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  id="password"
+                  name="password"
+                  type="password"
                   required
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                  placeholder="Enter your new password"
                 />
               </div>
             </div>
 
-            {!isResetMode && (
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <div className="mt-1">
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
-                  />
-                </div>
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                Confirm New Password
+              </label>
+              <div className="mt-1">
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm"
+                  placeholder="Confirm your new password"
+                />
               </div>
-            )}
+            </div>
 
             {error && (
               <div className="rounded-md bg-red-50 p-4">
@@ -146,22 +147,8 @@ export default function Login() {
                 {loading ? (
                   <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
-                  isResetMode ? 'Send reset link' : 'Sign in'
+                  'Update Password'
                 )}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsResetMode(!isResetMode)
-                  setError(null)
-                  setSuccess(null)
-                }}
-                className="text-sm font-medium text-red-600 hover:text-red-500"
-              >
-                {isResetMode ? 'Back to login' : 'Forgot your password?'}
               </button>
             </div>
           </form>

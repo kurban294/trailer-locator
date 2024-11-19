@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react'
-import { MagnifyingGlassIcon, XMarkIcon, MapPinIcon, SignalIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
+import React, { useState, useCallback, useEffect, memo } from 'react'
+import { MagnifyingGlassIcon, XMarkIcon, ArrowPathIcon, SignalIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { supabase } from '../lib/supabase'
 import debounce from 'lodash/debounce'
 import { useJsApiLoader } from '@react-google-maps/api'
@@ -61,14 +61,10 @@ const LocationRecording = () => {
         };
         
         // Only update if accuracy is better than previous
-        if (!accuracy || position.coords.accuracy < accuracy) {
+        const newAccuracy = position.coords.accuracy;
+        if (!accuracy || newAccuracy < accuracy) {
           setPosition(newPosition);
-          setAccuracy(position.coords.accuracy);
-        }
-        
-        // If accuracy is good enough, stop watching
-        if (position.coords.accuracy < 10) { // Less than 10 meters
-          stopWatchingLocation();
+          setAccuracy(newAccuracy);
         }
         
         setLocationLoading(false);
@@ -76,7 +72,6 @@ const LocationRecording = () => {
       (error) => {
         console.error('Error getting location:', error);
         setLocationError(getLocationErrorMessage(error));
-        setPosition(defaultCenter);
         setLocationLoading(false);
       },
       geoOptions
@@ -84,6 +79,14 @@ const LocationRecording = () => {
 
     setWatchId(id);
   };
+
+  // Start watching location when modal opens
+  useEffect(() => {
+    if (showLocationModal && isLoaded && !loadError) {
+      startWatchingLocation();
+    }
+    return () => stopWatchingLocation();
+  }, [showLocationModal, isLoaded]);
 
   const stopWatchingLocation = () => {
     if (watchId) {
@@ -104,14 +107,6 @@ const LocationRecording = () => {
         return 'Unable to get your location. Please try again.';
     }
   };
-
-  // Start watching location when modal opens
-  useEffect(() => {
-    if (showLocationModal && isLoaded && !loadError) {
-      startWatchingLocation();
-    }
-    return () => stopWatchingLocation();
-  }, [showLocationModal, isLoaded]);
 
   // Replace getCurrentLocation with new implementation
   const getCurrentLocation = () => {
@@ -195,7 +190,20 @@ const LocationRecording = () => {
   const handleUnitSelect = (unit) => {
     setSelectedUnit(unit)
     setShowLocationModal(true)
+    setNotes('')
   }
+
+  const handleNotesChange = (e) => {
+    e.preventDefault()
+    const value = e.target.value
+    setNotes(value)
+  }
+
+  useEffect(() => {
+    if (!showLocationModal) {
+      setNotes('')
+    }
+  }, [showLocationModal])
 
   const handleLocationUpdate = async () => {
     if (!position) {
@@ -220,7 +228,6 @@ const LocationRecording = () => {
         setIsSuccess(true)
         setTimeout(() => {
           setShowLocationModal(false)
-          setNotes('')
           setIsSuccess(false)
         }, 1500)
       } else {
@@ -238,9 +245,47 @@ const LocationRecording = () => {
     setSelectedUnit(null)
   }
 
-  // Location Recording Modal
-  const LocationModal = () => {
-    if (!showLocationModal || !selectedUnit) return null
+  // Notes Input Component
+  const NotesInput = memo(({ value, onChange }) => {
+    return (
+      <div className="mt-4">
+        <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
+          Notes
+        </label>
+        <div className="mt-1">
+          <textarea
+            id="notes"
+            name="notes"
+            rows={3}
+            className="shadow-sm focus:ring-red-500 focus:border-red-500 block w-full sm:text-sm border-gray-300 rounded-md"
+            placeholder="Add any additional notes about the location..."
+            value={value}
+            onChange={onChange}
+          />
+        </div>
+      </div>
+    );
+  });
+
+  // Location Modal Component
+  const LocationModal = memo(({ 
+    isLoaded, 
+    loadError, 
+    showLocationModal, 
+    selectedUnit, 
+    position, 
+    markers, 
+    locationLoading, 
+    locationError, 
+    accuracy,
+    notes,
+    loading,
+    onNotesChange,
+    onLocationUpdate,
+    onClose,
+    getCurrentLocation 
+  }) => {
+    if (!showLocationModal || !selectedUnit) return null;
 
     if (loadError) {
       return (
@@ -252,7 +297,7 @@ const LocationRecording = () => {
             </div>
           </div>
         </div>
-      )
+      );
     }
 
     if (!isLoaded) {
@@ -260,21 +305,7 @@ const LocationRecording = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
         </div>
-      )
-    }
-
-    if (isSuccess) {
-      return (
-        <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-              <CheckCircleIcon className="h-6 w-6 text-green-600" aria-hidden="true" />
-            </div>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Location Updated</h3>
-            <p className="mt-1 text-sm text-gray-500">The unit's location has been successfully recorded.</p>
-          </div>
-        </div>
-      )
+      );
     }
 
     return (
@@ -287,41 +318,36 @@ const LocationRecording = () => {
               <div className="relative flex w-full flex-col overflow-hidden bg-white">
                 {/* Map Section */}
                 <div className="relative h-96">
-                  {isLoaded ? (
-                    <>
-                      <LocationMap position={position} />
-                      {/* Location Accuracy Indicator */}
-                      <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg px-3 py-2 flex items-center space-x-2">
-                        <SignalIcon className={`h-5 w-5 ${
-                          accuracy < 10 ? 'text-green-500' : 
-                          accuracy < 30 ? 'text-yellow-500' : 
-                          'text-red-500'
-                        }`} />
-                        <span className="text-sm text-gray-700">
-                          {locationLoading ? 'Getting location...' : 
-                           accuracy ? `Accuracy: ±${Math.round(accuracy)}m` :
-                           'No location data'}
-                        </span>
-                      </div>
+                  <div className="relative h-full">
+                    <LocationMap 
+                      center={position} 
+                      markers={[{ position, popup: 'Current Location' }]}
+                    />
+                    
+                    {/* Location Update Button */}
+                    <button
+                      onClick={getCurrentLocation}
+                      className="absolute top-4 right-4 z-[1000] p-2 bg-white rounded-full shadow-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      disabled={locationLoading}
+                      title="Refresh Location"
+                    >
+                      <ArrowPathIcon className={`h-6 w-6 ${locationLoading ? 'text-gray-400' : 'text-red-500'} ${locationLoading ? 'animate-spin' : ''}`} />
+                    </button>
 
-                      {/* Refresh Location Button */}
-                      <button
-                        onClick={getCurrentLocation}
-                        disabled={locationLoading}
-                        className={`absolute top-4 right-4 bg-white rounded-lg shadow-md p-3 flex items-center space-x-2 hover:bg-gray-50 ${
-                          locationLoading ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                        title="Refresh Location"
-                      >
-                        <MapPinIcon className={`h-6 w-6 ${locationLoading ? 'animate-pulse' : ''} text-red-500`} />
-                        <span className="text-sm text-gray-700">Refresh</span>
-                      </button>
-                    </>
-                  ) : (
-                    <div className="h-full flex items-center justify-center bg-gray-100">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                    {/* Location Accuracy Indicator */}
+                    <div className="absolute bottom-4 left-4 z-[1000] bg-white rounded-lg shadow-lg px-3 py-2 flex items-center space-x-2">
+                      <SignalIcon className={`h-5 w-5 ${
+                        accuracy < 10 ? 'text-green-500' : 
+                        accuracy < 30 ? 'text-yellow-500' : 
+                        'text-red-500'
+                      }`} />
+                      <span className="text-sm text-gray-700">
+                        {locationLoading ? 'Getting location...' : 
+                         accuracy ? `Accuracy: ±${Math.round(accuracy)}m` : 
+                         'No location data'}
+                      </span>
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Form Section */}
@@ -343,6 +369,12 @@ const LocationRecording = () => {
                           <span className="font-medium">Model:</span> {selectedUnit.model || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-500">
+                          <span className="font-medium">License Number:</span> {selectedUnit.licence_number || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          <span className="font-medium">X Ref Number:</span> {selectedUnit.x_ref_number || 'N/A'}
+                        </p>
+                        <p className="text-sm text-gray-500">
                           <span className="font-medium">Current Location:</span> {selectedUnit.parking_location || 'Not set'}
                         </p>
                       </div>
@@ -354,22 +386,10 @@ const LocationRecording = () => {
                       </div>
                     )}
 
-                    <div className="mt-4">
-                      <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
-                        Notes
-                      </label>
-                      <div className="mt-1">
-                        <textarea
-                          id="notes"
-                          name="notes"
-                          rows={3}
-                          className="shadow-sm focus:ring-red-500 focus:border-red-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                          placeholder="Add any additional notes about the location..."
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                        />
-                      </div>
-                    </div>
+                    <NotesInput 
+                      value={notes} 
+                      onChange={onNotesChange}
+                    />
                   </div>
                 </div>
 
@@ -377,15 +397,15 @@ const LocationRecording = () => {
                   <button
                     type="button"
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                    onClick={handleLocationUpdate}
+                    onClick={onLocationUpdate}
                     disabled={loading || !position}
                   >
-                    {loading ? 'Updating...' : 'Update Location'}
+                    {loading ? 'Saving...' : 'Save Location'}
                   </button>
                   <button
                     type="button"
                     className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:w-auto sm:text-sm"
-                    onClick={() => setShowLocationModal(false)}
+                    onClick={onClose}
                   >
                     Cancel
                   </button>
@@ -395,8 +415,8 @@ const LocationRecording = () => {
           </div>
         </div>
       </div>
-    )
-  }
+    );
+  });
 
   return (
     <div className="min-h-full">
@@ -484,7 +504,23 @@ const LocationRecording = () => {
       </div>
 
       {/* Location Recording Modal */}
-      <LocationModal />
+      <LocationModal 
+        isLoaded={isLoaded}
+        loadError={loadError}
+        showLocationModal={showLocationModal}
+        selectedUnit={selectedUnit}
+        position={position}
+        markers={[{ position, popup: 'Current Location' }]}
+        locationLoading={locationLoading}
+        locationError={locationError}
+        accuracy={accuracy}
+        notes={notes}
+        loading={loading}
+        onNotesChange={(e) => setNotes(e.target.value)}
+        onLocationUpdate={handleLocationUpdate}
+        onClose={() => setShowLocationModal(false)}
+        getCurrentLocation={getCurrentLocation}
+      />
     </div>
   )
 }

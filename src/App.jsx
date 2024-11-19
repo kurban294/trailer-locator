@@ -8,6 +8,8 @@ import UserManagement from './pages/UserManagement'
 import Login from './pages/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
+import ResetPassword from './pages/ResetPassword'
+import FindUnitDetails from './components/FindUnitDetails'
 
 function App() {
   return (
@@ -34,6 +36,14 @@ function App() {
               }
             />
             <Route
+              path="/unit/:id"
+              element={
+                <ProtectedRoute>
+                  <FindUnitDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/units"
               element={
                 <AdminRoute>
@@ -50,6 +60,7 @@ function App() {
               }
             />
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
           </Routes>
         </main>
       </div>
