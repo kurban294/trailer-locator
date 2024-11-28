@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, memo } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useRef, memo } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import '../styles/leaflet.css';
 
 // Fix Leaflet marker icon issue
@@ -11,79 +11,130 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const defaultCenter = {
-  lat: 51.5074,
-  lng: -0.1278
-};
+const LocationMap = memo(({ center, isAdjustable = false, onMarkerDrag, onLocationUpdate, onClick }) => {
+  const mapRef = useRef(null)
+  const markerRef = useRef(null)
+  const isInitializedRef = useRef(false)
+  const isDraggingRef = useRef(false)
 
-const containerStyle = {
-  width: '100%',
-  height: '100%',
-  borderRadius: '0.5rem'
-};
-
-const LocationMap = memo(({ center = defaultCenter, markers = [] }) => {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-
-  // Initialize map only once
+  // Initialize map
   useEffect(() => {
-    if (!mapInstanceRef.current) {
+    if (!mapRef.current && !isInitializedRef.current) {
+      isInitializedRef.current = true;
+      
       const map = L.map('map', {
-        center: [center.lat, center.lng],
-        zoom: 18,
+        center: center || { lat: 51.5074, lng: -0.1278 },
+        zoom: 16,
         zoomControl: true,
-        maxZoom: 19
       });
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: ' OpenStreetMap contributors'
       }).addTo(map);
 
-      mapInstanceRef.current = map;
-    }
+      // Add marker at the center
+      const marker = L.marker([center.lat, center.lng], {
+        draggable: !isAdjustable
+      }).addTo(map);
+      
+      markerRef.current = marker;
 
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []); // Empty dependency array - only run once
-
-  // Handle center and markers updates
-  useEffect(() => {
-    if (mapInstanceRef.current) {
-      // Update center
-      if (center && center.lat && center.lng) {
-        mapInstanceRef.current.setView([center.lat, center.lng], 18, {
-          animate: false // Disable animation for better performance
+      // Handle marker drag in non-adjustable mode
+      if (!isAdjustable) {
+        marker.on('dragend', (e) => {
+          const pos = e.target.getLatLng();
+          onMarkerDrag?.({
+            lat: pos.lat,
+            lng: pos.lng
+          });
         });
       }
 
-      // Clear existing markers
-      if (mapRef.current) {
-        mapRef.current.forEach(marker => marker.remove());
-      }
-      mapRef.current = [];
+      // In manual mode, update marker position during map movement
+      if (isAdjustable) {
+        map.on('movestart', () => {
+          isDraggingRef.current = true;
+        });
 
-      // Add new markers
-      markers.forEach(marker => {
-        if (marker.position && marker.position.lat && marker.position.lng) {
-          const m = L.marker([marker.position.lat, marker.position.lng]);
-          if (marker.popup) {
-            m.bindPopup(marker.popup);
-          }
-          m.addTo(mapInstanceRef.current);
-          mapRef.current.push(m);
-        }
-      });
+        map.on('move', () => {
+          if (!isDraggingRef.current) return;
+          const mapCenter = map.getCenter();
+          marker.setLatLng(mapCenter);
+        });
+
+        map.on('moveend', () => {
+          if (!isDraggingRef.current) return;
+          isDraggingRef.current = false;
+          const mapCenter = map.getCenter();
+          onMarkerDrag?.({
+            lat: mapCenter.lat,
+            lng: mapCenter.lng
+          });
+        });
+      }
+
+      mapRef.current = map;
     }
-  }, [center, markers]); // Only run when center or markers change
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        markerRef.current = null;
+        isInitializedRef.current = false;
+        isDraggingRef.current = false;
+      }
+    };
+  }, [isAdjustable, onMarkerDrag]);
+
+  // Update map center when position changes from parent
+  useEffect(() => {
+    if (!mapRef.current || !center || isDraggingRef.current) return;
+
+    const currentCenter = mapRef.current.getCenter();
+    if (currentCenter.lat !== center.lat || currentCenter.lng !== center.lng) {
+      mapRef.current.setView([center.lat, center.lng], mapRef.current.getZoom(), {
+        animate: true,
+        duration: 0.5
+      });
+      
+      if (markerRef.current) {
+        markerRef.current.setLatLng([center.lat, center.lng]);
+      }
+    }
+  }, [center]);
+
+  // Force map to update its size when container size changes
+  useEffect(() => {
+    const resizeObserver = new ResizeObserver(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    });
+
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+      resizeObserver.observe(mapContainer);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   return (
-    <div id="map" style={containerStyle} />
+    <div 
+      id="map" 
+      style={{ 
+        height: '100%', 
+        width: '100%',
+        position: 'relative',
+        zIndex: 1
+      }} 
+    />
   );
 });
+
+LocationMap.displayName = 'LocationMap';
 
 export default LocationMap;

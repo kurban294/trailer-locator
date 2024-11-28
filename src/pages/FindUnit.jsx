@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { debounce } from 'lodash'
-import FindUnitDetails from '../components/FindUnit'
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { Link } from 'react-router-dom'
-import { formatDistanceToNow } from 'date-fns'
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import PageHeader from '../components/PageHeader'
+import FindUnitDetails from '../components/FindUnit'
+import { format, formatDistanceToNow } from 'date-fns'
 
-const FindUnit = () => {
+export default function FindUnit() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -24,15 +25,56 @@ const FindUnit = () => {
       setError(null)
 
       try {
-        const { data, error: searchError } = await supabase
+        // First get the units
+        const { data: unitsData, error: unitsError } = await supabase
           .from('units')
           .select('*')
           .ilike('unit_number', `%${query}%`)
           .order('unit_number')
           .limit(10)
 
-        if (searchError) throw searchError
-        setSearchResults(data)
+        if (unitsError) throw unitsError
+
+        // Then fetch the latest location record and user info for each unit
+        const unitsWithLocation = await Promise.all(unitsData.map(async (unit) => {
+          // Get the latest location record
+          const { data: locationData, error: locationError } = await supabase
+            .from('location_records')
+            .select('*')
+            .eq('unit_id', unit.id)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          if (locationError && locationError.code !== 'PGRST116') {
+            console.error('Error fetching location:', locationError)
+          }
+
+          let userData = null
+          if (locationData?.recorded_by) {
+            // Get the user profile data
+            const { data: profileData, error: profileError } = await supabase
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', locationData.recorded_by)
+              .single()
+
+            if (profileError) {
+              console.error('Error fetching user profile:', profileError)
+            } else {
+              userData = profileData
+            }
+          }
+
+          return {
+            ...unit,
+            latest_location: locationData || null,
+            recorded_by: userData,
+            updated_at: locationData?.recorded_at || null
+          }
+        }))
+
+        setSearchResults(unitsWithLocation)
       } catch (error) {
         console.error('Error searching units:', error)
         setError('Failed to search units. Please try again.')
@@ -113,22 +155,21 @@ const FindUnit = () => {
     const searchLower = searchQuery.toLowerCase()
     return (
       unit.unit_number?.toLowerCase().includes(searchLower) ||
-      unit.license_number?.toLowerCase().includes(searchLower) ||
+      unit.licence_number?.toLowerCase().includes(searchLower) ||
       unit.location?.toLowerCase().includes(searchLower) ||
-      unit.status?.toLowerCase().includes(searchLower)
+      unit.rag_status?.toLowerCase().includes(searchLower)
     )
   })
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <PageHeader 
+        title="Find Unit" 
+        description="Search and locate trailer units"
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!selectedUnit ? (
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Find Unit Location</h1>
-              <p className="text-gray-600">Search for a unit to view its current location and history</p>
-            </div>
-
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-6">
                 <div className="relative">
@@ -172,42 +213,71 @@ const FindUnit = () => {
                     <ul className="divide-y divide-gray-200">
                       {filteredUnits.map((unit) => (
                         <li key={unit.id}>
-                          <Link to={`/unit/${unit.id}`} className="block">
-                            <div className="px-6 py-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-3 mb-2">
-                                    <h3 className="text-lg font-semibold text-gray-900">
-                                      Unit {unit.unit_number}
+                          <Link to={`/unit/${unit.id}`} className="block hover:bg-gray-50">
+                            <div className="px-4 py-4 sm:px-6">
+                              {/* Mobile View */}
+                              <div className="md:hidden">
+                                <div className="flex justify-between items-start">
+                                  <div className="space-y-2">
+                                    <h3 className="text-base font-medium text-gray-900">
+                                      {unit.unit_number}
                                     </h3>
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium border ${getStatusColor(unit.status)}`}>
-                                      {unit.status}
-                                    </span>
-                                  </div>
-                                  <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                      <p className="text-sm text-gray-500">License Number</p>
-                                      <p className="text-sm font-medium text-gray-900">{unit.license_number || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm text-gray-500">Unit Type</p>
-                                      <p className="text-sm font-medium text-gray-900">{unit.unit_type || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm text-gray-500">Location</p>
-                                      <p className="text-sm font-medium text-gray-900">{unit.location || 'Unknown'}</p>
+                                    <div className="space-y-1">
+                                      <p className="text-sm text-gray-600">
+                                        License: {unit.licence_number || 'N/A'}
+                                      </p>
+                                      <p className="text-sm text-gray-600">
+                                        X-Ref: {unit.x_ref_number || 'N/A'}
+                                      </p>
+                                      <p className="text-sm text-gray-600">
+                                        Type: {unit.unit_type || 'N/A'}
+                                      </p>
+                                      <p className="text-sm text-gray-600">
+                                        Last Update: {unit.latest_location ? format(new Date(unit.latest_location.recorded_at), 'MMM d, yyyy h:mm a') : 'N/A'}
+                                      </p>
+                                      <p className="text-sm text-gray-600">
+                                        Recorded By: {unit.recorded_by ? `${unit.recorded_by.first_name} ${unit.recorded_by.last_name}` : 'N/A'}
+                                      </p>
                                     </div>
                                   </div>
                                 </div>
-                                <div className="ml-4 flex flex-col items-end">
-                                  <p className="text-sm text-gray-500">
-                                    Last Updated
-                                  </p>
-                                  <p className="text-sm text-gray-900">
-                                    {unit.updated_at 
-                                      ? formatDistanceToNow(new Date(unit.updated_at), { addSuffix: true })
-                                      : 'Never'}
-                                  </p>
+                              </div>
+
+                              {/* Desktop View */}
+                              <div className="hidden md:block">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <div className="grid grid-cols-6 gap-4">
+                                      <div>
+                                        <p className="text-sm text-gray-500">Unit Number</p>
+                                        <p className="text-sm font-medium text-gray-900">{unit.unit_number}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-gray-500">License Number</p>
+                                        <p className="text-sm font-medium text-gray-900">{unit.licence_number || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-gray-500">X-Ref Number</p>
+                                        <p className="text-sm font-medium text-gray-900">{unit.x_ref_number || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-gray-500">Unit Type</p>
+                                        <p className="text-sm font-medium text-gray-900">{unit.unit_type || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-gray-500">Last Update</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {unit.latest_location ? format(new Date(unit.latest_location.recorded_at), 'MMM d, yyyy h:mm a') : 'N/A'}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-gray-500">Recorded By</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {unit.recorded_by ? `${unit.recorded_by.first_name} ${unit.recorded_by.last_name}` : 'N/A'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -249,5 +319,3 @@ const FindUnit = () => {
     </div>
   )
 }
-
-export default FindUnit

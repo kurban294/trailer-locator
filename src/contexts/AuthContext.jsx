@@ -78,6 +78,15 @@ export function AuthProvider({ children }) {
         return { error }
       }
     },
+    signOut: async () => {
+      try {
+        const { error } = await supabase.auth.signOut()
+        if (error) throw error
+        return { error: null }
+      } catch (error) {
+        return { error }
+      }
+    },
     resetPassword: async (email) => {
       try {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {

@@ -204,40 +204,42 @@ const BatchUpload = ({ onSuccess }) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-4">
-        <div className="relative inline-block">
-          <button
-            onClick={() => handleDownloadTemplate('csv')}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Download CSV Template
-          </button>
-        </div>
-        <div className="relative inline-block">
-          <button
-            onClick={() => handleDownloadTemplate('xlsx')}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Download Excel Template
-          </button>
-        </div>
-        <div>
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={handleFileUpload}
-            disabled={loading}
-            className="hidden"
-            id="file-upload"
-          />
-          <label
-            htmlFor="file-upload"
-            className={`inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer ${
-              loading ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          >
-            {loading ? 'Uploading...' : 'Upload File'}
-          </label>
+      {/* Action Buttons Section */}
+      <div className="bg-white rounded-lg overflow-hidden">
+        <div className="p-4">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">Upload Options</h3>
+          <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-4">
+            <button
+              onClick={() => handleDownloadTemplate('csv')}
+              className="w-full md:w-auto inline-flex items-center justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
+              Download CSV Template
+            </button>
+            <button
+              onClick={() => handleDownloadTemplate('xlsx')}
+              className="w-full md:w-auto inline-flex items-center justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
+              Download Excel Template
+            </button>
+            <div className="w-full md:w-auto">
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileUpload}
+                disabled={loading}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className={`w-full md:w-auto inline-flex items-center justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer ${
+                  loading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {loading ? 'Uploading...' : 'Upload File'}
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 

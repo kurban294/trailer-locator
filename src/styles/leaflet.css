@@ -2,11 +2,26 @@
   width: 100%;
   height: 100%;
   border-radius: 0.5rem;
+  z-index: 0;
 }
 
 .leaflet-div-icon {
   background: transparent;
   border: none;
+}
+
+/* Ensure map controls stay within map container z-index context */
+.leaflet-control-container {
+  z-index: 0;
+}
+
+.leaflet-pane {
+  z-index: 0;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 0;
 }
 
 .marker-pin {

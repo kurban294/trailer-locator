@@ -1,25 +1,32 @@
-import React, { useState, useCallback, useEffect, memo } from 'react'
-import { MagnifyingGlassIcon, XMarkIcon, ArrowPathIcon, SignalIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react'
+import {
+  XMarkIcon,
+  ArrowPathIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  MapPinIcon,
+  SignalIcon,
+  MagnifyingGlassIcon,
+  CloudArrowUpIcon
+} from '@heroicons/react/24/outline'
 import { supabase } from '../lib/supabase'
 import debounce from 'lodash/debounce'
-import { useJsApiLoader } from '@react-google-maps/api'
 import LocationMap from '../components/LocationMap'
+import PageHeader from '../components/PageHeader'
 
 const defaultCenter = {
   lat: 51.5074,
   lng: -0.1278
 }
 
-const libraries = ['places', 'marker']
-
-const LocationRecording = () => {
+export default function LocationRecording({ setShowLocationModal }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedUnit, setSelectedUnit] = useState(null)
   const [searchResults, setSearchResults] = useState([])
   const [recentUnits, setRecentUnits] = useState([])
-  const [showLocationModal, setShowLocationModal] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [position, setPosition] = useState(defaultCenter)
   const [locationError, setLocationError] = useState(null)
   const [accuracy, setAccuracy] = useState(null)
@@ -27,24 +34,73 @@ const LocationRecording = () => {
   const [isSuccess, setIsSuccess] = useState(false)
   const [watchId, setWatchId] = useState(null)
   const [locationLoading, setLocationLoading] = useState(false)
+  const [isManualLocation, setIsManualLocation] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [locationTimeout, setLocationTimeout] = useState(false)
+  const [showRetryOptions, setShowRetryOptions] = useState(false)
+  const [showNotesModal, setShowNotesModal] = useState(false)
+  const [showQueueDrawer, setShowQueueDrawer] = useState(false);
+  const [queuedLocations, setQueuedLocations] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const timeoutRef = useRef(null)
 
-  // Load Google Maps API
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries,
-    mapIds: [import.meta.env.VITE_GOOGLE_MAPS_MAP_ID]
-  })
+  // Update parent component's modal state
+  useEffect(() => {
+    setShowLocationModal(showModal);
+  }, [showModal, setShowLocationModal]);
+
+  // Handle online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('Device is online');
+      setIsOnline(true);
+      // Process any queued updates when coming back online
+      processQueuedUpdates();
+    };
+    const handleOffline = () => {
+      console.log('Device is offline');
+      setIsOnline(false);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Process queued updates when coming online
+  const processQueuedUpdates = async () => {
+    const queuedUpdates = JSON.parse(localStorage.getItem('pendingLocationUpdates') || '[]');
+    if (queuedUpdates.length === 0) return;
+
+    setIsSyncing(true);
+    try {
+      for (const update of queuedUpdates) {
+        await saveLocation(update);
+      }
+      localStorage.setItem('pendingLocationUpdates', '[]');
+      // Update the queued locations state
+      setQueuedLocations([]);
+      setShowQueueDrawer(false);
+    } catch (error) {
+      console.error('Error processing queued updates:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Enhanced geolocation options
   const geoOptions = {
-    enableHighAccuracy: true, // Force high accuracy (GPS, etc.)
-    timeout: 30000, // Longer timeout for better accuracy
-    maximumAge: 0 // Always get fresh location
+    enableHighAccuracy: true,
+    timeout: 30000,
+    maximumAge: 0
   };
 
   const startWatchingLocation = () => {
     setLocationLoading(true);
     setLocationError(null);
+    setIsManualLocation(false);
 
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser');
@@ -52,26 +108,28 @@ const LocationRecording = () => {
       return;
     }
 
-    // Start watching location
+    // Clear existing watch
+    if (watchId) {
+      navigator.geolocation.clearWatch(watchId);
+    }
+
     const id = navigator.geolocation.watchPosition(
       (position) => {
-        const newPosition = {
+        console.log('Got GPS position:', position);
+        setPosition({
           lat: position.coords.latitude,
           lng: position.coords.longitude
-        };
-        
-        // Only update if accuracy is better than previous
-        const newAccuracy = position.coords.accuracy;
-        if (!accuracy || newAccuracy < accuracy) {
-          setPosition(newPosition);
-          setAccuracy(newAccuracy);
-        }
-        
+        });
+        setAccuracy(Math.round(position.coords.accuracy));
         setLocationLoading(false);
       },
       (error) => {
-        console.error('Error getting location:', error);
-        setLocationError(getLocationErrorMessage(error));
+        console.error('Geolocation error:', error);
+        setLocationError(
+          error.code === 1 ? 'Please enable location access' :
+          error.code === 2 ? 'Location not available' :
+          'Could not get your location'
+        );
         setLocationLoading(false);
       },
       geoOptions
@@ -80,46 +138,652 @@ const LocationRecording = () => {
     setWatchId(id);
   };
 
+  const handleMapClick = (e) => {
+    console.log('Map clicked:', e);
+    setPosition({
+      lat: e.lat,
+      lng: e.lng
+    });
+    setAccuracy(10); // Set fixed accuracy for manual locations
+    setIsManualLocation(true);
+  };
+
+  const handleMarkerDrag = (e) => {
+    console.log('Marker dragged:', e);
+    setPosition({
+      lat: e.lat,
+      lng: e.lng
+    });
+    setAccuracy(10); // Set fixed accuracy for manual locations
+    setIsManualLocation(true);
+  };
+
+  const saveLocation = async (locationData) => {
+    try {
+      console.log('Saving location data:', locationData);
+
+      // Validate Supabase connection
+      if (!supabase) {
+        throw new Error('Supabase client is not initialized');
+      }
+
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        throw new Error('Failed to get current user');
+      }
+
+      if (!user) {
+        throw new Error('No authenticated user found');
+      }
+
+      console.log('Current user:', user);
+
+      // Proceed with insert
+      const { data, error } = await supabase
+        .from('location_records')
+        .insert([{
+          unit_id: locationData.unit_id,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          notes: locationData.notes || null,
+          recorded_by: user.id
+        }])
+        .select();
+
+      if (error) {
+        console.error('Supabase error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          status: error.status,
+          statusText: error.statusText
+        });
+        throw new Error(`Database error: ${error.message || 'Unknown error occurred'}`);
+      }
+
+      console.log('Location saved successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Full error object:', error);
+      if (error.message) {
+        console.error('Error message:', error.message);
+      }
+      if (error.response) {
+        console.error('Error response:', error.response);
+      }
+      throw error;
+    }
+  };
+
+  const handleSaveLocation = async () => {
+    if (!selectedUnit) {
+      setError('Please select a unit first');
+      return;
+    }
+
+    if (!position) {
+      setError('No location data available');
+      return;
+    }
+
+    if (accuracy > 10 && !isManualLocation) {
+      const shouldProceed = window.confirm(
+        `GPS accuracy is currently ${accuracy}m which is not optimal.\n\n` +
+        'Would you like to:\n' +
+        '• Click "Cancel" to set location manually by dragging the map\n' +
+        '• Click "OK" to save the current location anyway'
+      );
+      
+      if (!shouldProceed) {
+        setIsManualLocation(true);
+        return;
+      }
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const locationData = {
+        unit_id: selectedUnit.id,
+        latitude: position.lat,
+        longitude: position.lng,
+        notes: notes || null
+      };
+
+      if (!isOnline) {
+        const queuedUpdates = JSON.parse(localStorage.getItem('pendingLocationUpdates') || '[]');
+        queuedUpdates.push(locationData);
+        localStorage.setItem('pendingLocationUpdates', JSON.stringify(queuedUpdates));
+        setIsSuccess(true);
+        // Show success message for 2 seconds before closing
+        setTimeout(() => {
+          setShowModal(false);
+          setIsSuccess(false);
+          setSelectedUnit(null);
+          setNotes('');
+        }, 2000);
+      } else {
+        await saveLocation(locationData);
+        setIsSuccess(true);
+        // Show success message for 2 seconds before closing
+        setTimeout(() => {
+          setShowModal(false);
+          setIsSuccess(false);
+          setSelectedUnit(null);
+          setNotes('');
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Save location error:', error);
+      setError(error.message || 'Failed to save location. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Start watching location when modal opens
   useEffect(() => {
-    if (showLocationModal && isLoaded && !loadError) {
+    if (showModal) {
       startWatchingLocation();
     }
     return () => stopWatchingLocation();
-  }, [showLocationModal, isLoaded]);
+  }, [showModal]);
 
-  const stopWatchingLocation = () => {
-    if (watchId) {
+  const stopWatchingLocation = useCallback(() => {
+    if (watchId !== null) {
       navigator.geolocation.clearWatch(watchId);
       setWatchId(null);
     }
-  };
+  }, [watchId]);
 
-  const getLocationErrorMessage = (error) => {
-    switch(error.code) {
-      case error.PERMISSION_DENIED:
-        return 'Location permission denied. Please enable location services.';
-      case error.POSITION_UNAVAILABLE:
-        return 'Location information is unavailable. Please try again.';
-      case error.TIMEOUT:
-        return 'Location request timed out. Please try again.';
-      default:
-        return 'Unable to get your location. Please try again.';
+  // Clear location watching on unmount
+  useEffect(() => {
+    return () => {
+      stopWatchingLocation();
+    };
+  }, [stopWatchingLocation]);
+
+  const getCurrentLocation = useCallback(async () => {
+    setLocationLoading(true)
+    setLocationError(null)
+    setLocationTimeout(false)
+    setIsManualLocation(false)
+    setShowRetryOptions(false)
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Geolocation is not supported by your browser'));
+          return;
+        }
+
+        // Set timeout for GPS coordinates
+        timeoutRef.current = setTimeout(() => {
+          reject(new Error('Location request timed out'));
+        }, 15000); // 15 seconds timeout
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            clearTimeout(timeoutRef.current);
+            resolve(position);
+          },
+          (error) => {
+            clearTimeout(timeoutRef.current);
+            reject(error);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+
+      setPosition({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude
+      })
+      setAccuracy(position.coords.accuracy)
+    } catch (error) {
+      console.error('Error getting location:', error)
+      if (error.message === 'Location request timed out') {
+        setLocationTimeout(true)
+      } else {
+        setLocationError(error.message)
+      }
+    } finally {
+      setLocationLoading(false)
     }
+  }, [])
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const getAccuracyIndicator = (accuracy) => {
+    if (!accuracy) return null;
+
+    let color, label;
+    if (accuracy <= 5) {
+      color = 'text-green-500';
+      label = 'Good';
+    } else if (accuracy <= 10) {
+      color = 'text-yellow-500';
+      label = 'Medium';
+    } else {
+      color = 'text-red-500';
+      label = 'Poor';
+    }
+
+    return (
+      <div className={`flex items-center ${color}`}>
+        <SignalIcon className="h-5 w-5 mr-1" />
+        <span className="text-sm font-medium">GPS Accuracy: {label} ({accuracy}m)</span>
+      </div>
+    );
   };
 
-  // Replace getCurrentLocation with new implementation
-  const getCurrentLocation = () => {
-    stopWatchingLocation(); // Stop current watch
-    startWatchingLocation(); // Start new watch
+  const LocationAccuracyIndicator = ({ accuracy }) => {
+    const accuracyIndicator = getAccuracyIndicator(accuracy);
+
+    return (
+      <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="flex flex-col space-y-4">
+          {locationTimeout ? (
+            <div className="flex items-center text-red-600">
+              <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
+              <span className="text-sm font-medium">
+                GPS location request timed out
+              </span>
+            </div>
+          ) : accuracyIndicator ? (
+            accuracyIndicator
+          ) : null}
+
+          {((accuracy > 5 && !isManualLocation) || showRetryOptions) && (
+            <div className="flex flex-col space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  getCurrentLocation();
+                  setShowRetryOptions(false);
+                }}
+                className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <ArrowPathIcon className="h-5 w-5 mr-2" />
+                Retry GPS
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  stopWatchingLocation();
+                  setIsManualLocation(true);
+                  setLocationError(null);
+                  setLocationTimeout(false);
+                  setShowRetryOptions(false);
+                  setLocationLoading(false);
+                }}
+                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <MapPinIcon className="h-5 w-5 mr-2" />
+                Select Manually
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Location Error Display Component
+  const LocationError = () => {
+    if (!locationError || locationTimeout) return null;
+
+    return (
+      <div className="mb-4 p-4 bg-red-50 rounded-lg">
+        <div className="flex items-center mb-2">
+          <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-2" />
+          <span className="text-red-700 font-medium">Location Error</span>
+        </div>
+        <p className="text-red-600 text-sm mb-4">{locationError}</p>
+        
+        <button
+          type="button"
+          onClick={getCurrentLocation}
+          className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+        >
+          <ArrowPathIcon className="h-5 w-5 mr-2" />
+          Retry
+        </button>
+      </div>
+    );
   };
+
+  const handleLocationUpdate = async () => {
+    if (!position) {
+      setError('Please wait for location to be determined')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data, error: recordError } = await supabase.rpc('record_unit_location', {
+        p_unit_id: selectedUnit.id,
+        p_latitude: position.lat,
+        p_longitude: position.lng,
+        p_notes: notes
+      })
+
+      if (recordError) throw recordError
+
+      if (data.success) {
+        setIsSuccess(true)
+        setTimeout(() => {
+          setShowModal(false)
+          setIsSuccess(false)
+        }, 1500)
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (error) {
+      console.error('Error recording location:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLocationRecorded = () => {
+    setSelectedUnit(null)
+  }
+
+  const NotesModal = memo(() => {
+    const [tempNotes, setTempNotes] = useState(notes);
+
+    const handleSaveNotes = () => {
+      setNotes(tempNotes);
+      setShowNotesModal(false);
+    };
+
+    if (!showNotesModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-[70]">
+        <div className="fixed inset-0 z-[70] overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all w-full mx-4 sm:my-8 sm:max-w-lg sm:h-auto sm:rounded-lg">
+              <div className="bg-white px-4 pb-4 pt-5 sm:p-6">
+                {/* Close button - moved outside of content area */}
+                <div className="absolute right-0 top-0 pr-4 pt-4 z-10">
+                  <button
+                    type="button"
+                    className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    onClick={() => setShowNotesModal(false)}
+                  >
+                    <span className="sr-only">Close</span>
+                    <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                  </button>
+                </div>
+
+                {/* Content area with more padding */}
+                <div className="mt-3 text-left">
+                  <h3 className="text-xl font-semibold leading-6 text-gray-900 mb-4 pt-2">
+                    Add Notes
+                  </h3>
+                  <div className="mt-4">
+                    <textarea
+                      rows={6}
+                      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-base"
+                      placeholder="Add any additional notes about this location..."
+                      value={tempNotes}
+                      onChange={(e) => setTempNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons with more padding and full width on mobile */}
+              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <button
+                  type="button"
+                  className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-3 text-base font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto"
+                  onClick={handleSaveNotes}
+                >
+                  Save Notes
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-3 text-base font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                  onClick={() => setShowNotesModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  });
+
+  const SuccessModal = memo(() => {
+    const [queueCount, setQueueCount] = useState(0);
+
+    useEffect(() => {
+      if (!isOnline) {
+        const queue = JSON.parse(localStorage.getItem('pendingLocationUpdates') || '[]');
+        setQueueCount(queue.length);
+      }
+    }, [isOnline]);
+
+    if (!isSuccess) return null;
+
+    return (
+      <div className="fixed inset-0 bg-green-50 bg-opacity-90 transition-opacity z-[80] flex items-center justify-center">
+        <div className="bg-white rounded-lg p-6 shadow-xl max-w-sm mx-4 w-full transform transition-all">
+          <div className="flex flex-col items-center text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <CheckCircleIcon className="h-8 w-8 text-green-600" />
+            </div>
+            <div className="mt-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                {isOnline ? 'Location Saved Successfully!' : 'Location Queued Successfully!'}
+              </h3>
+              <p className="mt-2 text-sm text-gray-500">
+                {isOnline ? (
+                  'The location has been recorded and saved to the database.'
+                ) : (
+                  <>
+                    <span className="font-medium text-amber-600">You're currently offline.</span>
+                    <br />
+                    This location has been added to the queue
+                    {queueCount > 0 && ` (${queueCount} ${queueCount === 1 ? 'location' : 'locations'} pending)`}
+                    <br />
+                    and will sync automatically when you're back online.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  });
+
+  const LocationModal = memo(() => {
+    if (!showModal) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-50">
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-0 text-center sm:items-center sm:p-0">
+            <div className="relative transform overflow-hidden bg-white text-left shadow-xl transition-all w-full h-full sm:my-8 sm:w-full sm:max-w-lg sm:h-auto sm:rounded-lg">
+              <div className="flex flex-col h-full">
+                {/* Close button */}
+                <div className="absolute right-0 top-0 pr-4 pt-4 block z-[60]">
+                  <button
+                    type="button"
+                    className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    onClick={() => setShowModal(false)}
+                  >
+                    <span className="sr-only">Close</span>
+                    <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  <div className="px-4 pb-4 pt-5 sm:p-6">
+                    <h3 className="text-lg font-semibold leading-6 text-gray-900 mb-4">
+                      Record Location
+                    </h3>
+
+                    {/* Unit Details */}
+                    {selectedUnit && (
+                      <div className="mb-4 bg-gray-50 p-4 rounded-lg">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Unit Number</p>
+                            <p className="text-sm text-gray-900">{selectedUnit.unit_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">X Ref Number</p>
+                            <p className="text-sm text-gray-900">{selectedUnit.x_ref_number || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Licence Number</p>
+                            <p className="text-sm text-gray-900">{selectedUnit.licence_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500">Unit Type</p>
+                            <p className="text-sm text-gray-900">{selectedUnit.unit_type}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Status Messages */}
+                    <div className="mb-4">
+                      {!isOnline && (
+                        <div className="flex items-center text-yellow-600 mb-2">
+                          <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
+                          <span className="text-sm">You are currently offline. Location will be saved when you're back online.</span>
+                        </div>
+                      )}
+                      {isSuccess && (
+                        <div className="flex items-center text-green-600 mb-2">
+                          <CheckCircleIcon className="h-5 w-5 mr-2" />
+                          <span className="text-sm">Location saved successfully!</span>
+                        </div>
+                      )}
+                      {error && (
+                        <div className="flex items-center text-red-600 mb-2">
+                          <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
+                          <span className="text-sm">{error}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Location Error */}
+                    <LocationError />
+
+                    {/* Accuracy Indicator */}
+                    {accuracy && !locationError && <LocationAccuracyIndicator accuracy={accuracy} />}
+
+                    {/* Map Container */}
+                    <div className="mb-4 relative rounded-lg overflow-hidden border border-gray-300" style={{ height: '400px' }}>
+                      <LocationMap
+                        center={position}
+                        isAdjustable={isManualLocation}
+                        onMarkerDrag={useCallback((newPosition) => {
+                          if (isManualLocation) {
+                            setPosition(newPosition);
+                          }
+                        }, [isManualLocation])}
+                      />
+                      {locationLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-[55]">
+                          <ArrowPathIcon className="h-8 w-8 text-gray-600 animate-spin" />
+                        </div>
+                      )}
+                      {isManualLocation && (
+                        <>
+                          <div className="absolute top-4 left-4 right-16 bg-white bg-opacity-90 p-2 rounded-lg shadow text-sm text-gray-600 z-[55]">
+                            Move the map to position the marker at your desired location
+                          </div>
+                          <button
+                            onClick={() => {
+                              stopWatchingLocation();
+                              setIsManualLocation(false);
+                              setShowRetryOptions(true);
+                              setLocationLoading(false);
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-white rounded-lg shadow-md z-[55] hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                            title="Exit Manual Mode"
+                          >
+                            <XMarkIcon className="h-6 w-6 text-gray-600" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Notes Button */}
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowNotesModal(true)}
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        {notes ? 'Edit Notes' : 'Add Notes'}
+                        {notes && <span className="ml-2 text-xs text-gray-500">(Notes added)</span>}
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Save Button */}
+                <div className="sticky bottom-0 left-0 right-0 px-4 py-3 bg-gray-50 border-t border-gray-200">
+                  <button
+                    type="button"
+                    className={`w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500'
+                    }`}
+                    onClick={handleSaveLocation}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin inline" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Location'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  });
 
   // Get current location when modal opens
   useEffect(() => {
-    if (showLocationModal && isLoaded && !loadError) {
+    if (showModal) {
       getCurrentLocation()
     }
-  }, [showLocationModal, isLoaded])
+  }, [showModal])
 
   // Load recent units
   useEffect(() => {
@@ -189,228 +853,146 @@ const LocationRecording = () => {
 
   const handleUnitSelect = (unit) => {
     setSelectedUnit(unit)
-    setShowLocationModal(true)
+    setShowModal(true)
     setNotes('')
   }
 
-  const handleNotesChange = (e) => {
-    e.preventDefault()
-    const value = e.target.value
-    setNotes(value)
-  }
-
   useEffect(() => {
-    if (!showLocationModal) {
+    if (!showModal) {
       setNotes('')
     }
-  }, [showLocationModal])
+  }, [showModal])
 
-  const handleLocationUpdate = async () => {
-    if (!position) {
-      setError('Please wait for location to be determined')
-      return
-    }
+  // Update queued locations count
+  useEffect(() => {
+    const updateQueueCount = () => {
+      const queue = JSON.parse(localStorage.getItem('pendingLocationUpdates') || '[]');
+      setQueuedLocations(queue);
+    };
 
-    setLoading(true)
-    setError(null)
+    // Update initially and when localStorage changes
+    updateQueueCount();
+    window.addEventListener('storage', updateQueueCount);
 
-    try {
-      const { data, error: recordError } = await supabase.rpc('record_unit_location', {
-        p_unit_id: selectedUnit.id,
-        p_latitude: position.lat,
-        p_longitude: position.lng,
-        p_notes: notes
-      })
+    return () => {
+      window.removeEventListener('storage', updateQueueCount);
+    };
+  }, []);
 
-      if (recordError) throw recordError
+  const QueueDrawer = memo(() => {
+    const [unitDetails, setUnitDetails] = useState({});
 
-      if (data.success) {
-        setIsSuccess(true)
-        setTimeout(() => {
-          setShowLocationModal(false)
-          setIsSuccess(false)
-        }, 1500)
-      } else {
-        throw new Error(data.message)
-      }
-    } catch (error) {
-      console.error('Error recording location:', error)
-      setError(error.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+    // Fetch unit details when drawer opens
+    useEffect(() => {
+      const fetchUnitDetails = async () => {
+        if (!showQueueDrawer || queuedLocations.length === 0) return;
 
-  const handleLocationRecorded = () => {
-    setSelectedUnit(null)
-  }
+        try {
+          const unitIds = [...new Set(queuedLocations.map(loc => loc.unit_id))];
+          const { data, error } = await supabase
+            .from('units')
+            .select('id, unit_number')
+            .in('id', unitIds);
 
-  // Notes Input Component
-  const NotesInput = memo(({ value, onChange }) => {
-    return (
-      <div className="mt-4">
-        <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
-          Notes
-        </label>
-        <div className="mt-1">
-          <textarea
-            id="notes"
-            name="notes"
-            rows={3}
-            className="shadow-sm focus:ring-red-500 focus:border-red-500 block w-full sm:text-sm border-gray-300 rounded-md"
-            placeholder="Add any additional notes about the location..."
-            value={value}
-            onChange={onChange}
-          />
-        </div>
-      </div>
-    );
-  });
+          if (error) throw error;
 
-  // Location Modal Component
-  const LocationModal = memo(({ 
-    isLoaded, 
-    loadError, 
-    showLocationModal, 
-    selectedUnit, 
-    position, 
-    markers, 
-    locationLoading, 
-    locationError, 
-    accuracy,
-    notes,
-    loading,
-    onNotesChange,
-    onLocationUpdate,
-    onClose,
-    getCurrentLocation 
-  }) => {
-    if (!showLocationModal || !selectedUnit) return null;
+          const detailsMap = {};
+          data.forEach(unit => {
+            detailsMap[unit.id] = unit;
+          });
+          setUnitDetails(detailsMap);
+        } catch (error) {
+          console.error('Error fetching unit details:', error);
+        }
+      };
 
-    if (loadError) {
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="rounded-md bg-red-50 p-4">
-            <h3 className="text-sm font-medium text-red-800">Error Loading Map</h3>
-            <div className="mt-2 text-sm text-red-700">
-              <p>Failed to load Google Maps. Please check your internet connection and try again.</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
+      fetchUnitDetails();
+    }, [showQueueDrawer, queuedLocations]);
 
-    if (!isLoaded) {
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-        </div>
-      );
-    }
+    if (!showQueueDrawer) return null;
 
     return (
-      <div className="fixed inset-0 z-50 overflow-hidden">
-        <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
-
-        <div className="fixed inset-0 z-10 overflow-y-auto">
-          <div className="flex min-h-full items-stretch justify-center text-center md:items-center">
-            <div className="flex w-full transform text-left transition md:my-8 md:max-w-2xl">
-              <div className="relative flex w-full flex-col overflow-hidden bg-white">
-                {/* Map Section */}
-                <div className="relative h-96">
-                  <div className="relative h-full">
-                    <LocationMap 
-                      center={position} 
-                      markers={[{ position, popup: 'Current Location' }]}
-                    />
-                    
-                    {/* Location Update Button */}
+      <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-[90]">
+        <div className="fixed inset-y-0 right-0 flex max-w-full">
+          <div className="w-screen max-w-md transform transition-transform duration-300 ease-in-out">
+            <div className="flex h-full flex-col overflow-y-scroll bg-white shadow-xl">
+              <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+                <div className="flex items-start justify-between">
+                  <h2 className="text-lg font-medium text-gray-900">
+                    Pending Locations ({queuedLocations.length})
+                  </h2>
+                  <div className="ml-3 flex h-7 items-center">
                     <button
-                      onClick={getCurrentLocation}
-                      className="absolute top-4 right-4 z-[1000] p-2 bg-white rounded-full shadow-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500"
-                      disabled={locationLoading}
-                      title="Refresh Location"
+                      type="button"
+                      className="relative -m-2 p-2 text-gray-400 hover:text-gray-500"
+                      onClick={() => setShowQueueDrawer(false)}
                     >
-                      <ArrowPathIcon className={`h-6 w-6 ${locationLoading ? 'text-gray-400' : 'text-red-500'} ${locationLoading ? 'animate-spin' : ''}`} />
+                      <span className="absolute -inset-0.5" />
+                      <span className="sr-only">Close panel</span>
+                      <XMarkIcon className="h-6 w-6" />
                     </button>
-
-                    {/* Location Accuracy Indicator */}
-                    <div className="absolute bottom-4 left-4 z-[1000] bg-white rounded-lg shadow-lg px-3 py-2 flex items-center space-x-2">
-                      <SignalIcon className={`h-5 w-5 ${
-                        accuracy < 10 ? 'text-green-500' : 
-                        accuracy < 30 ? 'text-yellow-500' : 
-                        'text-red-500'
-                      }`} />
-                      <span className="text-sm text-gray-700">
-                        {locationLoading ? 'Getting location...' : 
-                         accuracy ? `Accuracy: ±${Math.round(accuracy)}m` : 
-                         'No location data'}
-                      </span>
-                    </div>
                   </div>
                 </div>
 
-                {/* Form Section */}
-                <div className="px-4 pt-5 pb-4 sm:p-6">
-                  <div className="mt-3 text-center sm:mt-0 sm:text-left">
-                    <h3 className="text-lg font-medium leading-6 text-gray-900">
-                      Record Location - {selectedUnit.unit_number}
-                    </h3>
-
-                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
-                      <div className="space-y-2">
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">Type:</span> {selectedUnit.unit_type}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">Manufacturer:</span> {selectedUnit.manufacturer || 'N/A'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">Model:</span> {selectedUnit.model || 'N/A'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">License Number:</span> {selectedUnit.licence_number || 'N/A'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">X Ref Number:</span> {selectedUnit.x_ref_number || 'N/A'}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">Current Location:</span> {selectedUnit.parking_location || 'Not set'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {locationError && (
-                      <div className="mt-4 rounded-md bg-red-50 p-4">
-                        <div className="text-sm text-red-700">{locationError}</div>
-                      </div>
-                    )}
-
-                    <NotesInput 
-                      value={notes} 
-                      onChange={onNotesChange}
-                    />
+                <div className="mt-8">
+                  <div className="flow-root">
+                    <ul role="list" className="-my-6 divide-y divide-gray-200">
+                      {queuedLocations.map((location, index) => (
+                        <li key={index} className="flex py-6">
+                          <div className="ml-4 flex flex-1 flex-col">
+                            <div className="flex justify-between text-base font-medium text-gray-900">
+                              <h3>Unit {unitDetails[location.unit_id]?.unit_number || '...'}</h3>
+                              {isOnline && (
+                                <div className="flex items-center text-sm text-amber-600">
+                                  <CloudArrowUpIcon className="h-5 w-5 mr-1" />
+                                  Waiting to sync
+                                </div>
+                              )}
+                            </div>
+                            <div className="mt-1 text-sm text-gray-500">
+                              Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                            </div>
+                            {location.notes && (
+                              <p className="mt-1 text-sm text-gray-500">
+                                Notes: {location.notes}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                </div>
-
-                <div className="px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button
-                    type="button"
-                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                    onClick={onLocationUpdate}
-                    disabled={loading || !position}
-                  >
-                    {loading ? 'Saving...' : 'Save Location'}
-                  </button>
-                  <button
-                    type="button"
-                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:mt-0 sm:w-auto sm:text-sm"
-                    onClick={onClose}
-                  >
-                    Cancel
-                  </button>
                 </div>
               </div>
+
+              {isOnline && (
+                <div className="border-t border-gray-200 px-4 py-6 sm:px-6">
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      className={`flex items-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm ${
+                        isSyncing 
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-red-600 hover:bg-red-500'
+                      }`}
+                      onClick={processQueuedUpdates}
+                      disabled={isSyncing}
+                    >
+                      {isSyncing ? (
+                        <>
+                          <ArrowPathIcon className="h-5 w-5 mr-1 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <ArrowPathIcon className="h-5 w-5 mr-1" />
+                          Sync Now
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -419,110 +1001,139 @@ const LocationRecording = () => {
   });
 
   return (
-    <div className="min-h-full">
-      {/* Page header */}
-      <div className="bg-white shadow">
-        <div className="px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-semibold text-gray-900">Record Location</h1>
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      <PageHeader 
+        title="Record Location" 
+        subtitle="Record the current location of a unit"
+      />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-end mb-6">
+          {queuedLocations.length > 0 && (
+            <button
+              onClick={() => setShowQueueDrawer(true)}
+              className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700 hover:bg-amber-200"
+            >
+              <CloudArrowUpIcon className="h-5 w-5 mr-1" />
+              {queuedLocations.length} Pending
+            </button>
+          )}
         </div>
-      </div>
-
-      {/* Main content */}
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white shadow rounded-lg">
-            {/* Search Bar */}
-            <div className="p-4 sm:p-6">
-              <div className="max-w-3xl mx-auto">
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                  </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="block w-full rounded-md border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-red-600 sm:text-sm sm:leading-6"
-                    placeholder="Search for a unit by number, license, or serial number..."
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 flex items-center pr-3"
-                      onClick={() => setSearchQuery('')}
-                    >
-                      <XMarkIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                    </button>
-                  )}
+        <div className="bg-white shadow rounded-lg">
+          {/* Search Bar */}
+          <div className="p-4 sm:p-6">
+            <div className="max-w-3xl mx-auto">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
                 </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full rounded-md border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-red-600 sm:text-sm sm:leading-6"
+                  placeholder="Search for a unit by number, license, or serial number..."
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3"
+                    onClick={() => setSearchQuery('')}
+                  >
+                    <XMarkIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                  </button>
+                )}
               </div>
             </div>
+          </div>
 
-            {/* Results Section */}
-            <div className="px-4 sm:px-6 pb-6">
-              {loading ? (
-                <div className="text-center py-4">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-                </div>
-              ) : error ? (
-                <div className="text-center text-red-600 py-4">{error}</div>
-              ) : searchResults.length === 0 ? (
-                <div className="text-center text-gray-500 py-4">
-                  {searchQuery ? `No units found matching "${searchQuery}"` : 'Start typing to search for units'}
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Results Section */}
+          <div className="px-4 sm:px-6 pb-6">
+            {loading ? (
+              <div className="text-center py-4">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+              </div>
+            ) : error ? (
+              <div className="text-center text-red-600 py-4">{error}</div>
+            ) : searchResults.length === 0 ? (
+              <div className="text-center text-gray-500 py-4">
+                {searchQuery ? `No units found matching "${searchQuery}"` : 'Start typing to search for units'}
+              </div>
+            ) : (
+              <div className="mt-4">
+                <ul role="list" className="divide-y divide-gray-200">
                   {searchResults.map((unit) => (
-                    <div
-                      key={unit.id}
-                      className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-red-500 focus-within:ring-2 focus-within:ring-red-500 focus-within:ring-offset-2 cursor-pointer"
-                      onClick={() => handleUnitSelect(unit)}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-lg font-medium text-gray-900">{unit.unit_number}</h3>
-                          <p className="mt-1 text-sm text-gray-500">
-                            {unit.unit_type} • {unit.manufacturer} {unit.model}
-                          </p>
+                    <li key={unit.id}>
+                      <button
+                        onClick={() => handleUnitSelect(unit)}
+                        className="w-full text-left hover:bg-gray-50 block"
+                      >
+                        <div className="px-4 py-4 sm:px-6">
+                          {/* Mobile View */}
+                          <div className="md:hidden">
+                            <div className="flex justify-between items-start">
+                              <div className="space-y-2">
+                                <h3 className="text-base font-medium text-gray-900">
+                                  {unit.unit_number}
+                                </h3>
+                                <div className="space-y-1">
+                                  <p className="text-sm text-gray-600">
+                                    License: {unit.licence_number || 'N/A'}
+                                  </p>
+                                  <p className="text-sm text-gray-600">
+                                    X-Ref: {unit.x_ref_number || 'N/A'}
+                                  </p>
+                                  <p className="text-sm text-gray-600">
+                                    Type: {unit.unit_type || 'N/A'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Desktop View */}
+                          <div className="hidden md:block">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="grid grid-cols-4 gap-4">
+                                  <div>
+                                    <p className="text-sm text-gray-500">Unit Number</p>
+                                    <p className="text-sm font-medium text-gray-900">{unit.unit_number}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-500">License Number</p>
+                                    <p className="text-sm font-medium text-gray-900">{unit.licence_number || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-500">X-Ref Number</p>
+                                    <p className="text-sm font-medium text-gray-900">{unit.x_ref_number || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-500">Unit Type</p>
+                                    <p className="text-sm font-medium text-gray-900">{unit.unit_type || 'N/A'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-                          ${unit.rag_status === 'RAG 1' ? 'bg-red-100 text-red-800' :
-                            unit.rag_status === 'RAG 2' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'}`}>
-                          {unit.rag_status}
-                        </span>
-                      </div>
-                    </div>
+                      </button>
+                    </li>
                   ))}
-                </div>
-              )}
-            </div>
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Location Recording Modal */}
-      <LocationModal 
-        isLoaded={isLoaded}
-        loadError={loadError}
-        showLocationModal={showLocationModal}
-        selectedUnit={selectedUnit}
-        position={position}
-        markers={[{ position, popup: 'Current Location' }]}
-        locationLoading={locationLoading}
-        locationError={locationError}
-        accuracy={accuracy}
-        notes={notes}
-        loading={loading}
-        onNotesChange={(e) => setNotes(e.target.value)}
-        onLocationUpdate={handleLocationUpdate}
-        onClose={() => setShowLocationModal(false)}
-        getCurrentLocation={getCurrentLocation}
-      />
+      {showModal && <LocationModal />}
+      {/* Notes Modal */}
+      {showNotesModal && <NotesModal />}
+      {/* Success Modal */}
+      {isSuccess && <SuccessModal />}
+      {/* Queue Drawer */}
+      <QueueDrawer />
     </div>
   )
 }
-
-export default LocationRecording

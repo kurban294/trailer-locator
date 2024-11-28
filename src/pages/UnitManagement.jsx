@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import BatchUpload from '../components/BatchUpload'
+import PageHeader from '../components/PageHeader'
 import { UNIT_TYPES } from '../constants/unitTypes'
 import { UNIT_STATUSES } from '../constants/unitStatus'
 
@@ -348,14 +349,40 @@ export default function UnitManagement() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Unit Management</h1>
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="sm:flex sm:items-center">
-            <div className="sm:flex-auto">
+    <div className="min-h-screen bg-gray-50">
+      <PageHeader 
+        title="Unit Management" 
+        description="Manage trailer units and their details"
+      />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white shadow rounded-lg p-6">
+          {/* Action Buttons Section - Mobile Optimized */}
+          <div className="md:flex md:justify-end mb-6">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden md:hidden">
+              <div className="p-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Actions</h3>
+                <div className="flex flex-col space-y-2">
+                  <button
+                    onClick={() => setShowBatchUpload(true)}
+                    className="w-full inline-flex items-center justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                  >
+                    Batch Upload
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingUnit(null)
+                      setShowCreateModal(true)
+                    }}
+                    className="w-full inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  >
+                    Add Unit
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none space-x-4">
+
+            {/* Desktop Action Buttons */}
+            <div className="hidden md:flex md:space-x-4">
               <button
                 onClick={() => setShowBatchUpload(true)}
                 className="inline-flex items-center justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 sm:w-auto"
@@ -373,547 +400,601 @@ export default function UnitManagement() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Search Bar */}
-      <div className="mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search units..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg"
-          />
-          <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-        </div>
-      </div>
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search units..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+              />
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+            </div>
+          </div>
 
-      {/* Error and Success Messages */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-      {successMessage && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-          {successMessage}
-        </div>
-      )}
+          {/* Error and Success Messages */}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
+          )}
+          {successMessage && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+              {successMessage}
+            </div>
+          )}
 
-      {/* Units Table */}
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Number</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manufacturer</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-4 text-center">Loading...</td>
-              </tr>
-            ) : filteredUnits.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-4 text-center">No units found</td>
-              </tr>
-            ) : (
-              filteredUnits.map((unit) => (
-                <tr 
-                  key={unit.id}
-                  onClick={(e) => handleRowClick(unit, e)}
-                  className="hover:bg-gray-50 cursor-pointer"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.unit_number}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.unit_type}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.manufacturer}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.model}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{unit.parking_location}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                      ${unit.rag_status === 'RAG 1' ? 'bg-red-100 text-red-800' :
-                        unit.rag_status === 'RAG 2' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-green-100 text-green-800'}`}>
-                      {unit.rag_status}
-                    </span>
-                  </td>
-                  <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                    <button
-                      onClick={() => handleEditUnit(unit)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
+          {/* Units Table */}
+          <div className="overflow-x-auto">
+            {/* Mobile View */}
+            <div className="md:hidden">
+              {loading ? (
+                <div className="p-4 text-center">Loading...</div>
+              ) : filteredUnits.length === 0 ? (
+                <div className="p-4 text-center">No units found</div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {filteredUnits.map((unit) => (
+                    <div 
+                      key={unit.id}
+                      onClick={(e) => handleRowClick(unit, e)}
+                      className="p-4 hover:bg-gray-50 cursor-pointer"
                     >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(unit)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Create/Edit Unit Modal */}
-      {(showCreateModal || editingUnit) && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4 text-center">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => handleCancelEdit()} />
-
-            <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl transition-all w-full max-w-2xl">
-              <div className="bg-white">
-                {/* Header */}
-                <div className="border-b border-gray-100 px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-semibold text-gray-900">
-                      {editingUnit ? 'Edit Unit' : 'Create New Unit'}
-                    </h3>
-                    <button
-                      onClick={() => handleCancelEdit()}
-                      className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
-                    >
-                      <span className="sr-only">Close</span>
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Form Content */}
-                <form onSubmit={handleSubmit}>
-                  <div className="px-6 py-4">
-                    <div className="grid grid-cols-1 gap-6">
-                      {/* Basic Information */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Basic Information
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Unit Number</label>
-                            <input
-                              type="text"
-                              name="unit_number"
-                              value={formData.unit_number}
-                              onChange={handleInputChange}
-                              required
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Unit Type</label>
-                            <select
-                              name="unit_type"
-                              value={formData.unit_type}
-                              onChange={handleInputChange}
-                              required
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            >
-                              {UNIT_TYPES.map((type) => (
-                                <option key={type} value={type}>{type}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Unit Status</label>
-                            <select
-                              name="unit_status"
-                              value={formData.unit_status}
-                              onChange={handleInputChange}
-                              required
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            >
-                              {UNIT_STATUSES.map((status) => (
-                                <option key={status} value={status}>{status}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">X-Ref Number</label>
-                            <input
-                              type="text"
-                              name="x_ref_number"
-                              value={formData.x_ref_number}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                        </div>
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="font-medium text-gray-900">{unit.unit_number}</div>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full
+                          ${unit.rag_status === 'RAG 1' ? 'bg-red-100 text-red-800' :
+                            unit.rag_status === 'RAG 2' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'}`}>
+                          {unit.rag_status}
+                        </span>
                       </div>
-
-                      {/* Vehicle Information */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Vehicle Information
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Manufacturer</label>
-                            <input
-                              type="text"
-                              name="manufacturer"
-                              value={formData.manufacturer}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Model</label>
-                            <input
-                              type="text"
-                              name="model"
-                              value={formData.model}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Year</label>
-                            <input
-                              type="number"
-                              name="year"
-                              value={formData.year}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                        </div>
+                      <div className="text-sm text-gray-500 space-y-1">
+                        <div>Type: {unit.unit_type}</div>
+                        {unit.licence_number && <div>License: {unit.licence_number}</div>}
                       </div>
-
-                      {/* Registration Information */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Registration Information
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">License Number</label>
-                            <input
-                              type="text"
-                              name="licence_number"
-                              value={formData.licence_number}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Serial Number</label>
-                            <input
-                              type="text"
-                              name="serial_number"
-                              value={formData.serial_number}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Location & Status */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Location & Status
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">Parking Location</label>
-                            <input
-                              type="text"
-                              name="parking_location"
-                              value={formData.parking_location}
-                              onChange={handleInputChange}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-sm font-medium text-gray-700">RAG Status</label>
-                            <select
-                              name="rag_status"
-                              value={formData.rag_status}
-                              onChange={handleInputChange}
-                              required
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
-                            >
-                              {RAG_STATUSES.map((status) => (
-                                <option key={status.value} value={status.value}>{status.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
+                      <div className="mt-3 flex justify-end space-x-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditUnit(unit);
+                          }}
+                          className="text-sm text-blue-600 hover:text-blue-900"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(unit);
+                          }}
+                          className="text-sm text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-                  {/* Footer */}
-                  <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3 border-t border-gray-100">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+            {/* Desktop View */}
+            <table className="min-w-full divide-y divide-gray-200 hidden md:table">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Number</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manufacturer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-4 text-center">Loading...</td>
+                  </tr>
+                ) : filteredUnits.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-4 text-center">No units found</td>
+                  </tr>
+                ) : (
+                  filteredUnits.map((unit) => (
+                    <tr 
+                      key={unit.id}
+                      onClick={(e) => handleRowClick(unit, e)}
+                      className="hover:bg-gray-50 cursor-pointer"
                     >
-                      {loading ? (
-                        <span className="flex items-center">
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          Saving...
+                      <td className="px-6 py-4 whitespace-nowrap">{unit.unit_number}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{unit.unit_type}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{unit.manufacturer}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{unit.model}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{unit.parking_location}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                          ${unit.rag_status === 'RAG 1' ? 'bg-red-100 text-red-800' :
+                            unit.rag_status === 'RAG 2' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'}`}>
+                          {unit.rag_status}
                         </span>
-                      ) : (
-                        editingUnit ? 'Update Unit' : 'Create Unit'
-                      )}
+                      </td>
+                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                        <button
+                          onClick={() => handleEditUnit(unit)}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(unit)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Create/Edit Unit Modal */}
+          {(showCreateModal || editingUnit) && (
+            <div className="fixed inset-0 z-50 overflow-y-auto">
+              <div className="flex min-h-screen items-center justify-center p-4 text-center">
+                <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => handleCancelEdit()} />
+
+                <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl transition-all w-full max-w-2xl">
+                  <div className="bg-white">
+                    {/* Header */}
+                    <div className="border-b border-gray-100 px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-semibold text-gray-900">
+                          {editingUnit ? 'Edit Unit' : 'Create New Unit'}
+                        </h3>
+                        <button
+                          onClick={() => handleCancelEdit()}
+                          className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
+                        >
+                          <span className="sr-only">Close</span>
+                          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Form Content */}
+                    <form onSubmit={handleSubmit}>
+                      <div className="px-6 py-4">
+                        <div className="grid grid-cols-1 gap-6">
+                          {/* Basic Information */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Basic Information
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Unit Number</label>
+                                <input
+                                  type="text"
+                                  name="unit_number"
+                                  value={formData.unit_number}
+                                  onChange={handleInputChange}
+                                  required
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Unit Type</label>
+                                <select
+                                  name="unit_type"
+                                  value={formData.unit_type}
+                                  onChange={handleInputChange}
+                                  required
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                >
+                                  {UNIT_TYPES.map((type) => (
+                                    <option key={type} value={type}>{type}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Unit Status</label>
+                                <select
+                                  name="unit_status"
+                                  value={formData.unit_status}
+                                  onChange={handleInputChange}
+                                  required
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                >
+                                  {UNIT_STATUSES.map((status) => (
+                                    <option key={status} value={status}>{status}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">X-Ref Number</label>
+                                <input
+                                  type="text"
+                                  name="x_ref_number"
+                                  value={formData.x_ref_number}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Vehicle Information */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Vehicle Information
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Manufacturer</label>
+                                <input
+                                  type="text"
+                                  name="manufacturer"
+                                  value={formData.manufacturer}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Model</label>
+                                <input
+                                  type="text"
+                                  name="model"
+                                  value={formData.model}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Year</label>
+                                <input
+                                  type="number"
+                                  name="year"
+                                  value={formData.year}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Registration Information */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Registration Information
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">License Number</label>
+                                <input
+                                  type="text"
+                                  name="licence_number"
+                                  value={formData.licence_number}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Serial Number</label>
+                                <input
+                                  type="text"
+                                  name="serial_number"
+                                  value={formData.serial_number}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Location & Status */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Location & Status
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">Parking Location</label>
+                                <input
+                                  type="text"
+                                  name="parking_location"
+                                  value={formData.parking_location}
+                                  onChange={handleInputChange}
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="block text-sm font-medium text-gray-700">RAG Status</label>
+                                <select
+                                  name="rag_status"
+                                  value={formData.rag_status}
+                                  onChange={handleInputChange}
+                                  required
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                >
+                                  {RAG_STATUSES.map((status) => (
+                                    <option key={status.value} value={status.value}>{status.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3 border-t border-gray-100">
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                        >
+                          {loading ? (
+                            <span className="flex items-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Saving...
+                            </span>
+                          ) : (
+                            editingUnit ? 'Update Unit' : 'Create Unit'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelEdit()}
+                          className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div className="mt-3 text-center">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">Delete Unit</h3>
+                  <div className="mt-2 px-7 py-3">
+                    <p className="text-sm text-gray-500">
+                      Are you sure you want to delete this unit? This action cannot be undone.
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">
+                      {unitToDelete?.unit_number}
+                    </p>
+                  </div>
+                  <div className="items-center px-4 py-3">
+                    <button
+                      onClick={handleDeleteConfirm}
+                      disabled={loading}
+                      className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      {loading ? 'Deleting...' : 'Delete'}
                     </button>
                     <button
-                      type="button"
-                      onClick={() => handleCancelEdit()}
-                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      onClick={() => {
+                        setShowDeleteConfirm(false)
+                        setUnitToDelete(null)
+                      }}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       Cancel
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3 text-center">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Delete Unit</h3>
-              <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-gray-500">
-                  Are you sure you want to delete this unit? This action cannot be undone.
-                </p>
-                <p className="mt-1 text-sm font-medium text-gray-900">
-                  {unitToDelete?.unit_number}
-                </p>
-              </div>
-              <div className="items-center px-4 py-3">
-                <button
-                  onClick={handleDeleteConfirm}
-                  disabled={loading}
-                  className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  {loading ? 'Deleting...' : 'Delete'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowDeleteConfirm(false)
-                    setUnitToDelete(null)
-                  }}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Batch Upload Modal */}
-      {showBatchUpload && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-medium text-gray-900">
-                Batch Upload Units
-              </h3>
-              <button
-                onClick={() => setShowBatchUpload(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <BatchUpload
-                onSuccess={() => {
-                  setShowBatchUpload(false)
-                  fetchUnits()
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Unit Details Modal */}
-      {showDetailsModal && selectedUnit && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4 text-center">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowDetailsModal(false)} />
-
-            <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl transition-all w-full max-w-2xl">
-              <div className="bg-white">
-                {/* Header */}
-                <div className="border-b border-gray-100 px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-semibold text-gray-900">
-                      Unit Details
-                    </h3>
-                    <button
-                      onClick={() => setShowDetailsModal(false)}
-                      className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
-                    >
-                      <span className="sr-only">Close</span>
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+          {/* Batch Upload Modal */}
+          {showBatchUpload && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+              <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-medium text-gray-900">
+                    Batch Upload Units
+                  </h3>
+                  <button
+                    onClick={() => setShowBatchUpload(false)}
+                    className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                  >
+                    ×
+                  </button>
                 </div>
 
-                {/* Content */}
-                <div className="px-6 py-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Basic Information */}
-                    <div className="space-y-6">
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Basic Information
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Unit Number</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.unit_number}</p>
+                <div className="mt-4">
+                  <BatchUpload
+                    onSuccess={() => {
+                      setShowBatchUpload(false)
+                      fetchUnits()
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unit Details Modal */}
+          {showDetailsModal && selectedUnit && (
+            <div className="fixed inset-0 z-50 overflow-y-auto">
+              <div className="flex min-h-screen items-center justify-center p-4 text-center">
+                <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowDetailsModal(false)} />
+
+                <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl transition-all w-full max-w-2xl">
+                  <div className="bg-white">
+                    {/* Header */}
+                    <div className="border-b border-gray-100 px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-semibold text-gray-900">
+                          Unit Details
+                        </h3>
+                        <button
+                          onClick={() => setShowDetailsModal(false)}
+                          className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
+                        >
+                          <span className="sr-only">Close</span>
+                          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="px-6 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Basic Information */}
+                        <div className="space-y-6">
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Basic Information
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Unit Number</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.unit_number}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Type</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.unit_type}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Status</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.unit_status || 'N/A'}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">X-Ref Number</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.x_ref_number || 'N/A'}</p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Type</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.unit_type}</p>
-                          </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Status</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.unit_status || 'N/A'}</p>
-                          </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">X-Ref Number</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.x_ref_number || 'N/A'}</p>
+
+                          {/* Vehicle Information */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Vehicle Information
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Manufacturer</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.manufacturer || 'N/A'}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Model</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.model || 'N/A'}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Year</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.year || 'N/A'}</p>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Vehicle Information */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Vehicle Information
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Manufacturer</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.manufacturer || 'N/A'}</p>
+                        {/* Additional Information */}
+                        <div className="space-y-6">
+                          {/* Registration Information */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Registration Information
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">License Number</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.licence_number || 'N/A'}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Serial Number</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.serial_number || 'N/A'}</p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Model</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.model || 'N/A'}</p>
+
+                          {/* Location & Status */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Location & Status
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Parking Location</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.parking_location || 'N/A'}</p>
+                              </div>
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">RAG Status</span>
+                                <p className="mt-1">
+                                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                                    selectedUnit.rag_status === 'RAG 1' ? 'bg-red-100 text-red-800' :
+                                    selectedUnit.rag_status === 'RAG 2' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-green-100 text-green-800'}`}>
+                                    {selectedUnit.rag_status}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Year</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.year || 'N/A'}</p>
+
+                          {/* Audit Information */}
+                          <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
+                            <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
+                              Audit Information
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 p-3 rounded-md">
+                                <span className="text-sm font-medium text-gray-500">Last Updated</span>
+                                <p className="mt-1 text-sm text-gray-900 font-medium">
+                                  {selectedUnit.last_updated_at ? new Date(selectedUnit.last_updated_at).toLocaleString() : 'N/A'}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Additional Information */}
-                    <div className="space-y-6">
-                      {/* Registration Information */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Registration Information
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">License Number</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.licence_number || 'N/A'}</p>
-                          </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Serial Number</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.serial_number || 'N/A'}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Location & Status */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Location & Status
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Parking Location</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{selectedUnit.parking_location || 'N/A'}</p>
-                          </div>
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">RAG Status</span>
-                            <p className="mt-1">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                                selectedUnit.rag_status === 'RAG 1' ? 'bg-red-100 text-red-800' :
-                                selectedUnit.rag_status === 'RAG 2' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-green-100 text-green-800'}`}>
-                                {selectedUnit.rag_status}
-                              </span>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Audit Information */}
-                      <div className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-                        <h4 className="text-sm font-medium text-red-600 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                          Audit Information
-                        </h4>
-                        <div className="space-y-3">
-                          <div className="bg-gray-50 p-3 rounded-md">
-                            <span className="text-sm font-medium text-gray-500">Last Updated</span>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">
-                              {selectedUnit.last_updated_at ? new Date(selectedUnit.last_updated_at).toLocaleString() : 'N/A'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                    {/* Footer */}
+                    <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+                      <button
+                        onClick={() => handleEditUnit(selectedUnit)}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        Edit Unit
+                      </button>
+                      <button
+                        onClick={() => setShowDetailsModal(false)}
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        Close
+                      </button>
                     </div>
                   </div>
                 </div>
-
-                {/* Footer */}
-                <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
-                  <button
-                    onClick={() => handleEditUnit(selectedUnit)}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                  >
-                    Edit Unit
-                  </button>
-                  <button
-                    onClick={() => setShowDetailsModal(false)}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                  >
-                    Close
-                  </button>
-                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

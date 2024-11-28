@@ -48,8 +48,10 @@ const FindUnitDetails = () => {
   const [endDate, setEndDate] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
+  const [mapCenter, setMapCenter] = useState(null);
 
   const mapRef = useRef(null);
+  const historyRef = useRef(null);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -65,8 +67,9 @@ const FindUnitDetails = () => {
       const lng = parseFloat(unit.longitude);
 
       if (!isNaN(lat) && !isNaN(lng)) {
+        setMapCenter({ lat, lng });
         setMarkers([{
-          position: [lat, lng],
+          position: { lat, lng },
           popup: `
             <div class="text-sm">
               <div class="font-medium mb-1">Current Location</div>
@@ -135,6 +138,14 @@ const FindUnitDetails = () => {
 
     setFilteredHistory(filtered || []);
   }, [locationHistory, dateFilter, startDate, endDate]);
+
+  useEffect(() => {
+    if (showHistory && historyRef.current) {
+      setTimeout(() => {
+        historyRef.current.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [showHistory]);
 
   const handleFilterClick = (filterType) => {
     switch (filterType) {
@@ -389,67 +400,28 @@ const FindUnitDetails = () => {
   };
 
   const handleViewLocation = (location) => {
-    if (!location?.latitude || !location?.longitude) {
-      console.warn('Invalid location data:', location);
-      return;
-    }
-
     const lat = parseFloat(location.latitude);
     const lng = parseFloat(location.longitude);
-
-    if (isNaN(lat) || isNaN(lng)) {
-      console.warn('Invalid coordinates:', { lat, lng });
-      return;
-    }
-
-    // Update selected location
-    setSelectedLocation(location);
-
-    // Scroll to map if it's below the viewport
-    const mapElement = document.querySelector('.map-container');
-    if (mapElement) {
-      mapElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-
-    // Create a marker for this location
-    const newMarkers = [{
-      position: [lat, lng],
-      popup: `
-        <div class="text-sm">
-          <div class="font-medium mb-1">Location Update</div>
-          <div class="text-gray-600">
-            ${formatDate(location.recorded_at)}<br>
-            ${location.notes || 'No notes'}
+    
+    if (!isNaN(lat) && !isNaN(lng)) {
+      setMapCenter({ lat, lng });
+      setMarkers([{
+        position: { lat, lng },
+        popup: `
+          <div class="text-sm">
+            <div class="font-medium mb-1">Location Update</div>
+            <div class="text-gray-600">
+              Unit: ${unit.unit_number}<br>
+              Updated: ${formatDate(location.recorded_at)}<br>
+              ${location.notes ? `Notes: ${location.notes}` : ''}
+            </div>
           </div>
-        </div>
-      `
-    }];
-
-    // Update map center and markers
-    setUnit(prev => ({
-      ...prev,
-      latitude: lat,
-      longitude: lng
-    }));
-
-    // Update markers separately
-    setMarkers(newMarkers);
+        `
+      }]);
+    }
   };
 
-  const mapCenter = useMemo(() => {
-    const lat = parseFloat(unit?.latitude);
-    const lng = parseFloat(unit?.longitude);
-    
-    const hasValidCoordinates = 
-      lat != null && 
-      lng != null &&
-      !isNaN(lat) && 
-      !isNaN(lng) &&
-      lat >= -90 && lat <= 90 &&
-      lng >= -180 && lng <= 180;
-
-    return hasValidCoordinates ? { lat, lng } : { lat: 51.5074, lng: -0.1278 }; // Default to London coordinates
-  }, [unit?.latitude, unit?.longitude]);
+  const defaultCenter = useMemo(() => ({ lat: 51.5074, lng: -0.1278 }), []);
 
   if (loading) {
     return (
@@ -479,6 +451,9 @@ const FindUnitDetails = () => {
     );
   }
 
+  const currentLocation = locationHistory && locationHistory.length > 0 ? locationHistory[0] : null;
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${currentLocation?.latitude},${currentLocation?.longitude}`;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
@@ -492,46 +467,53 @@ const FindUnitDetails = () => {
 
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
         <div className="p-6">
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Unit {unit?.unit_number}
               </h2>
               <p className="text-sm text-gray-600 mb-4">
-                Last updated: {formatDate(unit?.updated_at)}
+                Last updated: {currentLocation ? formatDate(currentLocation.recorded_at) : 'Not available'}
               </p>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <ClockIcon className="h-4 w-4 mr-2" />
-                Location History
-              </button>
-              <button
-                onClick={() => setShowQRCode(!showQRCode)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <QrCodeIcon className="h-4 w-4 mr-2" />
-                QR Code
-              </button>
-              <button
-                onClick={handleOpenInGoogleMaps}
-                disabled={!unit?.latitude || !unit?.longitude}
-                className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium ${
-                  unit?.latitude && unit?.longitude
-                    ? 'text-white bg-red-600 hover:bg-red-700'
-                    : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                }`}
-              >
-                <MapPinIcon className="h-4 w-4 mr-2" />
-                Open in Maps
-              </button>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Action Buttons Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+            <div className="p-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Actions</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-3xl mx-auto">
+                <button
+                  onClick={handleOpenInGoogleMaps}
+                  disabled={!unit?.latitude || !unit?.longitude}
+                  className={`flex items-center justify-center px-4 py-2 border text-sm font-medium rounded-md ${
+                    unit?.latitude && unit?.longitude
+                      ? 'text-white bg-red-600 hover:bg-red-700 border-transparent'
+                      : 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
+                  }`}
+                >
+                  <MapPinIcon className="h-4 w-4 mr-2" />
+                  Open in Maps
+                </button>
+                <button
+                  onClick={() => setShowQRCode(!showQRCode)}
+                  className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <QrCodeIcon className="h-4 w-4 mr-2" />
+                  QR Code
+                </button>
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <ClockIcon className="h-4 w-4 mr-2" />
+                  Location History
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
             <div className="px-4 py-5 sm:p-6">
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
@@ -559,9 +541,52 @@ const FindUnitDetails = () => {
             </div>
           </div>
 
-          <div className="mt-6 h-96 map-container">
+          {currentLocation && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Last Known Location Details</h2>
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Recorded At</dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      {formatDate(currentLocation.recorded_at)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Recorded By</dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      {currentLocation.user_profile ? 
+                        `${currentLocation.user_profile.first_name} ${currentLocation.user_profile.last_name}` : 
+                        'Unknown'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Notes</dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      {currentLocation.notes || 'No notes'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">View in Maps</dt>
+                    <dd className="mt-1">
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Open in Google Maps
+                      </a>
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 h-96 map-container relative z-0">
             <LocationMap 
-              center={mapCenter}
+              center={mapCenter || defaultCenter}
               markers={markers}
             />
           </div>
@@ -605,227 +630,85 @@ const FindUnitDetails = () => {
           )}
 
           {showHistory && (
-            <div className="mt-8">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Location History</h2>
-                <button
-                  onClick={() => setShowDatePicker(true)}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  <FunnelIcon className="h-4 w-4 mr-2" />
-                  Filter by Date
-                </button>
-              </div>
-
-              {showDatePicker && createPortal(
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  {/* Backdrop */}
-                  <div 
-                    className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-[9999]"
-                    onClick={() => setShowDatePicker(false)}
-                    aria-hidden="true"
-                  />
-                  
-                  {/* Bottom Sheet/Drawer */}
-                  <div 
-                    className={`fixed inset-x-0 bottom-0 transform transition-transform duration-300 ease-in-out z-[10000] 
-                      sm:inset-x-auto sm:right-1/2 sm:translate-x-1/2 sm:top-1/2 sm:-translate-y-1/2 sm:bottom-auto
-                      sm:max-w-lg sm:w-full sm:rounded-lg ${
-                        showDatePicker ? 'translate-y-0 sm:translate-y-[-50%]' : 'translate-y-full sm:translate-y-full'
-                      }`}
-                    onClick={(e) => e.stopPropagation()}
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="modal-title"
+            <div ref={historyRef} className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden scroll-mt-6">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Location History</h2>
+                  <button
+                    onClick={() => setShowDatePicker(true)}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                   >
-                    <div className="bg-white rounded-t-xl sm:rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
-                      {/* Handle for mobile */}
-                      <div className="sm:hidden w-12 h-1.5 bg-gray-300 rounded-full mx-auto my-3" />
-                      
-                      <div className="px-4 py-5 sm:p-6">
-                        <div className="flex justify-between items-center mb-5">
-                          <h3 className="text-lg font-medium text-gray-900" id="modal-title">
-                            Filter by Date
-                          </h3>
-                          <button
-                            onClick={() => setShowDatePicker(false)}
-                            className="text-gray-400 hover:text-gray-500"
-                          >
-                            <XMarkIcon className="h-6 w-6" />
-                          </button>
-                        </div>
+                    <FunnelIcon className="h-4 w-4 mr-2" />
+                    Filter by Date
+                  </button>
+                </div>
 
-                        <div className="space-y-4">
-                          {/* Quick Filters */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <button
-                              onClick={() => handleFilterClick('all')}
-                              className={`px-4 py-2 rounded-md text-sm font-medium ${
-                                dateFilter === 'all' 
-                                  ? 'bg-red-100 text-red-700 border-2 border-red-500' 
-                                  : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
-                              }`}
-                            >
-                              All Time
-                            </button>
-                            <button
-                              onClick={() => handleFilterClick('today')}
-                              className={`px-4 py-2 rounded-md text-sm font-medium ${
-                                dateFilter === 'today' 
-                                  ? 'bg-red-100 text-red-700 border-2 border-red-500' 
-                                  : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
-                              }`}
-                            >
-                              Today
-                            </button>
-                            <button
-                              onClick={() => handleFilterClick('7days')}
-                              className={`px-4 py-2 rounded-md text-sm font-medium ${
-                                dateFilter === '7days' 
-                                  ? 'bg-red-100 text-red-700 border-2 border-red-500' 
-                                  : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
-                              }`}
-                            >
-                              Last 7 Days
-                            </button>
-                            <button
-                              onClick={() => handleFilterClick('30days')}
-                              className={`px-4 py-2 rounded-md text-sm font-medium ${
-                                dateFilter === '30days' 
-                                  ? 'bg-red-100 text-red-700 border-2 border-red-500' 
-                                  : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
-                              }`}
-                            >
-                              Last 30 Days
-                            </button>
-                          </div>
-
-                          {/* Custom Date Range */}
-                          <div className="border-t border-gray-200 pt-4">
-                            <h4 className="text-sm font-medium text-gray-700 mb-3">Custom Range</h4>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm text-gray-700 mb-1">Start Date</label>
-                                <DatePicker
-                                  selected={startDate}
-                                  onChange={date => {
-                                    setStartDate(date);
-                                    setDateFilter('custom');
-                                  }}
-                                  selectsStart
-                                  startDate={startDate}
-                                  endDate={endDate}
-                                  maxDate={new Date()}
-                                  placeholderText="Start Date"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-red-500 focus:border-red-500"
-                                  popperClassName="z-[10001]"
-                                  popperPlacement="top-start"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm text-gray-700 mb-1">End Date</label>
-                                <DatePicker
-                                  selected={endDate}
-                                  onChange={date => {
-                                    setEndDate(date);
-                                    setDateFilter('custom');
-                                  }}
-                                  selectsEnd
-                                  startDate={startDate}
-                                  endDate={endDate}
-                                  minDate={startDate}
-                                  maxDate={new Date()}
-                                  placeholderText="End Date"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-red-500 focus:border-red-500"
-                                  popperClassName="z-[10001]"
-                                  popperPlacement="top-start"
-                                />
+                {/* Timeline */}
+                <div className="flow-root">
+                  <ul role="list" className="-mb-8">
+                    {filteredHistory.map((location, locationIdx) => (
+                      <li key={location.id}>
+                        <div className="relative pb-8">
+                          {locationIdx !== filteredHistory.length - 1 ? (
+                            <span
+                              className="absolute left-5 top-5 -ml-px h-full w-0.5 bg-gray-200"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <div className="relative flex items-start space-x-3">
+                            <div className="relative">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 ring-8 ring-white">
+                                <MapPinIcon className="h-5 w-5 text-red-600" aria-hidden="true" />
                               </div>
                             </div>
-                          </div>
-
-                          {/* Apply Button for Custom Range */}
-                          {dateFilter === 'custom' && startDate && endDate && (
-                            <button
-                              onClick={() => setShowDatePicker(false)}
-                              className="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                            >
-                              Apply Filter
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>,
-                document.body
-              )}
-
-              {/* Timeline */}
-              <div className="flow-root">
-                <ul role="list" className="-mb-8">
-                  {filteredHistory.map((location, locationIdx) => (
-                    <li key={location.id}>
-                      <div className="relative pb-8">
-                        {locationIdx !== filteredHistory.length - 1 ? (
-                          <span
-                            className="absolute left-5 top-5 -ml-px h-full w-0.5 bg-gray-200"
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                        <div className="relative flex items-start space-x-3">
-                          <div className="relative">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 ring-8 ring-white">
-                              <MapPinIcon className="h-5 w-5 text-red-600" aria-hidden="true" />
-                            </div>
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                              <div className="flex justify-between items-center mb-1">
-                                <div className="text-sm font-medium text-gray-900">
-                                  Location Updated
-                                </div>
-                                <button
-                                  onClick={() => handleViewLocation(location)}
-                                  className="inline-flex items-center px-3 py-1 text-sm font-medium text-red-600 hover:text-red-800 bg-red-50 rounded-full"
-                                >
-                                  View on Map
-                                </button>
-                              </div>
-                              <div className="mt-2 space-y-2">
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <UserCircleIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />
-                                  {location.user_profile ? 
-                                    `${location.user_profile.first_name} ${location.user_profile.last_name}` : 
-                                    'Unknown'}
-                                </div>
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <CalendarIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />
-                                  {formatDate(location.recorded_at)}
-                                </div>
-                                {location.notes && (
-                                  <div className="flex items-start text-sm text-gray-500">
-                                    <ChatBubbleLeftIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400 mt-0.5" />
-                                    <span className="whitespace-pre-wrap">{location.notes}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+                                <div className="flex justify-between items-center mb-1">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    Location Updated
                                   </div>
-                                )}
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <MapPinIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />
-                                  {`${location.latitude}, ${location.longitude}`}
+                                  <button
+                                    onClick={() => handleViewLocation(location)}
+                                    className="inline-flex items-center px-3 py-1 text-sm font-medium text-red-600 hover:text-red-800 bg-red-50 rounded-full"
+                                  >
+                                    View on Map
+                                  </button>
+                                </div>
+                                <div className="mt-2 space-y-2">
+                                  <div className="flex items-center text-sm text-gray-500">
+                                    <UserCircleIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                                    {location.user_profile ? 
+                                      `${location.user_profile.first_name} ${location.user_profile.last_name}` : 
+                                      'Unknown'}
+                                  </div>
+                                  <div className="flex items-center text-sm text-gray-500">
+                                    <CalendarIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                                    {formatDate(location.recorded_at)}
+                                  </div>
+                                  {location.notes && (
+                                    <div className="flex items-start text-sm text-gray-500">
+                                      <ChatBubbleLeftIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400 mt-0.5" />
+                                      <span className="whitespace-pre-wrap">{location.notes}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center text-sm text-gray-500">
+                                    <MapPinIcon className="mr-1.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                                    {`${location.latitude}, ${location.longitude}`}
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                {filteredHistory.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    No location history available
-                  </div>
-                )}
+                      </li>
+                    ))}
+                  </ul>
+                  {filteredHistory.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No location history available
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
