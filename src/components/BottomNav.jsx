@@ -14,7 +14,6 @@ const BottomNav = () => {
   const navigate = useNavigate();
   const { signOut, user, isAdmin } = useAuth();
 
-  // If user is not logged in, don't render the navigation
   if (!user) return null;
 
   const handleSignOut = async () => {
@@ -27,9 +26,7 @@ const BottomNav = () => {
     }
   };
 
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
+  const isActive = (path) => location.pathname === path;
 
   const regularNavItems = [
     { path: '/record-location', icon: HomeIcon, label: 'Record' },
@@ -44,33 +41,47 @@ const BottomNav = () => {
   const navItems = isAdmin() ? [...regularNavItems, ...adminNavItems] : regularNavItems;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe">
-      <div className={`grid grid-cols-${navItems.length + 1} gap-1`}>
+    <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'white', borderTop: '1px solid #e5e7eb' }} className="md:hidden">
+      <div style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '64px' }}>
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center py-2 px-1 ${
-                isActive(item.path)
-                  ? 'text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: isActive(item.path) ? '#2563eb' : '#4b5563',
+                textDecoration: 'none'
+              }}
             >
-              <Icon className="h-6 w-6" />
-              <span className="text-xs mt-1">{item.label}</span>
+              <Icon style={{ width: '24px', height: '24px' }} />
+              <span style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>{item.label}</span>
             </Link>
           );
         })}
         
-        {/* Sign Out Button */}
         <button
           onClick={handleSignOut}
-          className="flex flex-col items-center justify-center py-2 px-1 text-red-600 hover:text-red-800"
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#dc2626',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            padding: 0
+          }}
         >
-          <ArrowRightOnRectangleIcon className="h-6 w-6" />
-          <span className="text-xs mt-1">Sign Out</span>
+          <ArrowRightOnRectangleIcon style={{ width: '24px', height: '24px' }} />
+          <span style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Sign Out</span>
         </button>
       </div>
     </nav>

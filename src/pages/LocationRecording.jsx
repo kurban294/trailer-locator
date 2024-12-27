@@ -120,8 +120,15 @@ export default function LocationRecording({ setShowLocationModal }) {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         });
-        setAccuracy(Math.round(position.coords.accuracy));
+        const currentAccuracy = Math.round(position.coords.accuracy);
+        setAccuracy(currentAccuracy);
         setLocationLoading(false);
+
+        // If accuracy is good enough (less than or equal to 10 meters), stop watching
+        if (currentAccuracy <= 10) {
+          navigator.geolocation.clearWatch(id);
+          setWatchId(null);
+        }
       },
       (error) => {
         console.error('Geolocation error:', error);
