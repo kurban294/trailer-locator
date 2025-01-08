@@ -124,8 +124,8 @@ export default function LocationRecording({ setShowLocationModal }) {
         setAccuracy(currentAccuracy);
         setLocationLoading(false);
 
-        // If accuracy is good enough (less than or equal to 10 meters), stop watching
-        if (currentAccuracy <= 10) {
+        // If accuracy is good enough (less than or equal to 5 meters), stop watching
+        if (currentAccuracy <= 5) {
           navigator.geolocation.clearWatch(id);
           setWatchId(null);
         }
@@ -236,7 +236,7 @@ export default function LocationRecording({ setShowLocationModal }) {
       return;
     }
 
-    if (accuracy > 10 && !isManualLocation) {
+    if (accuracy > 5 && !isManualLocation) {
       const shouldProceed = window.confirm(
         `GPS accuracy is currently ${accuracy}m which is not optimal.\n\n` +
         'Would you like to:\n' +
@@ -376,7 +376,10 @@ export default function LocationRecording({ setShowLocationModal }) {
     if (!accuracy) return null;
 
     let color, label;
-    if (accuracy <= 5) {
+    if (accuracy <= 2) {
+      color = 'text-green-500';
+      label = 'Excellent';
+    } else if (accuracy <= 5) {
       color = 'text-green-500';
       label = 'Good';
     } else if (accuracy <= 10) {
