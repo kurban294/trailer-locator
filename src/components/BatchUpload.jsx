@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import { UNIT_TYPES } from '../constants/unitTypes'
 
 const BatchUpload = ({ onSuccess }) => {
